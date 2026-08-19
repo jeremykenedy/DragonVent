@@ -462,19 +462,22 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
   display:flex; flex-direction:column; }
 .vent-tab[data-vent-page="settings"]{ margin-top:auto; }
 .vent-view{ display:none; flex:1; min-height:0; overflow:auto; }
-.vent-main[data-vent-page="home"] [data-vent-content="home"],
-.vent-main[data-vent-page="manual"] [data-vent-content="manual"],
-.vent-main[data-vent-page="auto"] [data-vent-content="auto"],
-/* Boot gate. Every product surface lives in this one document, and the one to
+/* Boot gate. Every product surface lives in this one document, and which one to
    show is only known once /api/v2/info answers. Without this the DragonBreath
    rail painted first and was then hidden, so a DragonVent load flashed the wrong
    product's icons on every refresh. Capability-gated controls are collapsed for
-   the same reason: they default to visible in markup and are only hidden once
-   the capability list arrives. boot_ready() clears the attribute on both the
-   success and failure paths, so a device that never answers still renders. */
+   the same reason: they default to visible in markup and are only hidden once the
+   capability list arrives. bootReady() clears the attribute on both the success
+   and failure paths, with a timeout backstop, so a device that never answers
+   still renders. Keep these two rules OUT of any selector list below: dropped
+   mid-list they terminate it, and every selector above the brace silently
+   inherits display:none. */
 :root[data-booting] .app{ display: none !important; }
 :root[data-booting] [data-capability]{ display: none !important; }
 
+.vent-main[data-vent-page="home"] [data-vent-content="home"],
+.vent-main[data-vent-page="manual"] [data-vent-content="manual"],
+.vent-main[data-vent-page="auto"] [data-vent-content="auto"],
 .vent-main[data-vent-page="fans"] [data-vent-content="fans"],
 .vent-main[data-vent-page="lighting"] [data-vent-content="lighting"],
 .vent-main[data-vent-page="settings"] [data-vent-content="settings"]{ display:flex; }
@@ -2038,10 +2041,20 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
     document.querySelectorAll('[data-fan-preset]').forEach(function(b){ b.disabled = !w; });
     var st = $('dv-fan-status');
     if(st){
-      st.className = 'mode-status' + (w ? ' is-live' : ' is-warn');
-      st.textContent = w
-        ? 'Chamber exhaust reporting ' + fanFmt(f.chamber) + '.'
-        : 'Needs a connected Bambu printer source. Read-only right now.';
+      /* A rejected gcode outranks everything else here. Bambu firmware refuses
+         third-party gcode_line with "mqtt message verify failed", and the
+         printer's report stream is the only place that shows up — the publish
+         itself succeeds, so without this the screen would claim it worked. */
+      if(f.last_error){
+        st.className = 'mode-status is-warn';
+        st.textContent = 'Printer refused the last command: ' + f.last_error;
+      } else if(w){
+        st.className = 'mode-status is-live';
+        st.textContent = 'Chamber exhaust reporting ' + fanFmt(f.chamber) + '.';
+      } else {
+        st.className = 'mode-status is-warn';
+        st.textContent = 'Needs a connected Bambu printer source. Read-only right now.';
+      }
     }
   }
   function fanSet(pct){
@@ -2050,7 +2063,19 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
     fanRender();
     ventFlash('dv-fan-msg', 'Setting chamber fan to ' + fanPct + '\u2026');
     ventPost('/api/v2/command', {api_version:2, command:{name:'fan', percent:fanPct}})
-      .then(function(){ ventFlash('dv-fan-msg','Sent at ' + fanPct + '%. The printer can still override it at a layer change.','is-ok'); })
+      .then(function(){
+        /* Published, not accepted. The verdict arrives in the printer's next
+           report a second or so later, so re-read state before claiming it worked. */
+        ventFlash('dv-fan-msg','Sent at ' + fanPct + '%, waiting for the printer to confirm\u2026');
+        setTimeout(function(){
+          fetch('/api/v2/state',{cache:'no-store'}).then(function(r){return r.json();}).then(function(s2){
+            var e = s2 && s2.fans && s2.fans.last_error;
+            if(e) ventFlash('dv-fan-msg','Printer refused it: ' + e,'is-error');
+            else  ventFlash('dv-fan-msg','Accepted at ' + fanPct + '%. The printer can still override it at a layer change.','is-ok');
+            if(s2) applyFans(s2);
+          }).catch(function(){});
+        }, 2000);
+      })
       .catch(function(j){ ventFlash('dv-fan-msg',(j && j.message) || 'Fan command failed.','is-error'); });
   }
 

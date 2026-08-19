@@ -234,6 +234,13 @@ static cJSON *make_state(void)
     cJSON_AddNumberToObject(fans, "heatbreak", f.heatbreak);
     cJSON_AddNumberToObject(fans, "scale", 15);
     cJSON_AddBoolToObject(fans, "writable", source == DC_SRC_BAMBU && connected);
+    // Whatever the printer said about the last gcode we sent. Bambu firmware
+    // rejects third-party gcode_line with "mqtt message verify failed"; without
+    // this the Fans screen reports a cheerful success while the printer discards
+    // every command.
+    char gerr[64] = "";
+    if (source == DC_SRC_BAMBU) dc_bambu_last_gcode_error(gerr, sizeof gerr);
+    cJSON_AddStringToObject(fans, "last_error", gerr);
 
     float open_c = 45, close_c = 35;
     dv_policy_get_thresholds(&open_c, &close_c);

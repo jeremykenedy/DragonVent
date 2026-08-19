@@ -84,6 +84,13 @@ esp_err_t dc_bambu_get_fans(dc_bambu_fans_t *out);
 // newline; one is appended.
 esp_err_t dc_bambu_send_gcode(const char *line);
 
+// Reason string from the printer's last gcode_line acknowledgement, or "" if
+// the last one succeeded / none has been sent. Bambu firmware rejects
+// third-party gcode with result "failed" + reason "mqtt message verify failed";
+// without surfacing that, a fan control reports success while the printer
+// silently discards every command.
+void dc_bambu_last_gcode_error(char *out, size_t len);
+
 // Wipe saved Bambu config (factory reset).
 esp_err_t dc_bambu_clear_config(void);
 

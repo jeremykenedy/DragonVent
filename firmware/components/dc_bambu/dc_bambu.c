@@ -143,6 +143,7 @@ static bool find_quoted_int(const char *s, const char *key, int *out)
 // can be host-unit-tested (tests/dc_bambu_host_test.c).
 
 static dc_bambu_fans_t s_fans = { -1, -1, -1, -1 };
+static char s_gcode_err[64] = "";
 
 static void parse_report(const char *json)
 {
@@ -168,7 +169,26 @@ static void parse_report(const char *json)
     bool got_fcham = find_quoted_int(json, "\"big_fan2_speed\"",      &fcham);
     bool got_fhb   = find_quoted_int(json, "\"heatbreak_fan_speed\"", &fhb);
 
+    // gcode_line acknowledgement. Arrives on the same report topic as status:
+    //   {"print":{"command":"gcode_line","result":"failed",
+    //             "reason":"mqtt message verify failed","sequence_id":"802"}}
+    // Only look when the payload actually mentions gcode_line, so a normal
+    // push_status can never be mistaken for an ack.
+    char ack_res[24], ack_why[64];
+    bool is_ack = strstr(json, "\"gcode_line\"") != NULL
+               && dc_bambu_find_string(json, "\"result\"", ack_res, sizeof ack_res);
+
     xSemaphoreTake(s_lock, portMAX_DELAY);
+    if (is_ack) {
+        if (strcmp(ack_res, "success") == 0) {
+            s_gcode_err[0] = '\0';
+        } else {
+            if (!dc_bambu_find_string(json, "\"reason\"", ack_why, sizeof ack_why) || !ack_why[0])
+                snprintf(ack_why, sizeof ack_why, "%s", ack_res);
+            snprintf(s_gcode_err, sizeof s_gcode_err, "%s", ack_why);
+            ESP_LOGW(TAG, "printer rejected gcode: %s", s_gcode_err);
+        }
+    }
     if (got_fpart) s_fans.part      = fpart;
     if (got_faux)  s_fans.aux       = faux;
     if (got_fcham) s_fans.chamber   = fcham;
@@ -380,6 +400,15 @@ esp_err_t dc_bambu_get_fans(dc_bambu_fans_t *out)
     return ESP_OK;
 }
 
+void dc_bambu_last_gcode_error(char *out, size_t len)
+{
+    if (!out || !len) return;
+    if (!s_lock) { out[0] = '\0'; return; }
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    snprintf(out, len, "%s", s_gcode_err);
+    xSemaphoreGive(s_lock);
+}
+
 esp_err_t dc_bambu_send_gcode(const char *line)
 {
     if (!line || !line[0] || strchr(line, '\n')) return ESP_ERR_INVALID_ARG;
@@ -392,6 +421,9 @@ esp_err_t dc_bambu_send_gcode(const char *line)
         (unsigned long)(++seq), line);
     if (n <= 0 || n >= (int)sizeof payload) return ESP_ERR_INVALID_SIZE;
     ESP_LOGI(TAG, "gcode -> %s", line);
+    // Clear the previous verdict so the UI can tell "no answer yet" from a
+    // stale failure; the ack (or its absence) refreshes it within a second.
+    if (s_lock) { xSemaphoreTake(s_lock, portMAX_DELAY); s_gcode_err[0] = '\0'; xSemaphoreGive(s_lock); }
     // QoS 0, same as the pushall above. At QoS 1 esp-mqtt blocks the calling task
     // until the PUBACK lands, and the caller here is the single httpd worker —
     // so one fan command stalled every other HTTP request on the device for up

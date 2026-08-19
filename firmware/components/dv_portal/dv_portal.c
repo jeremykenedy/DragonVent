@@ -221,6 +221,20 @@ static cJSON *make_state(void)
     else cJSON_AddNumberToObject(printer, "bed_temperature_c", bed);
     cJSON_AddStringToObject(printer, "material", material);
 
+    // Printer fans. Read-only for every source except Bambu, where the Fans
+    // screen can also drive the chamber exhaust. Speeds are Bambu's native 0..15
+    // steps; -1 means no report has carried that field yet. `writable` tells the
+    // SPA whether to render controls or just a readout.
+    cJSON *fans = cJSON_AddObjectToObject(root, "fans");
+    dc_bambu_fans_t f = { -1, -1, -1, -1 };
+    if (source == DC_SRC_BAMBU) dc_bambu_get_fans(&f);
+    cJSON_AddNumberToObject(fans, "part", f.part);
+    cJSON_AddNumberToObject(fans, "aux", f.aux);
+    cJSON_AddNumberToObject(fans, "chamber", f.chamber);
+    cJSON_AddNumberToObject(fans, "heatbreak", f.heatbreak);
+    cJSON_AddNumberToObject(fans, "scale", 15);
+    cJSON_AddBoolToObject(fans, "writable", source == DC_SRC_BAMBU && connected);
+
     float open_c = 45, close_c = 35;
     dv_policy_get_thresholds(&open_c, &close_c);
     cJSON *policy = cJSON_AddObjectToObject(root, "policy");
@@ -251,7 +265,8 @@ static esp_err_t info_get(httpd_req_t *req)
     cJSON_AddStringToObject(root, "project", "dragonvent");
     add_device_id(root);
     cJSON *caps = cJSON_AddArrayToObject(root, "capabilities");
-    const char *values[] = { "vent_manual", "vent_auto", "vent_calibrate", "source_status", "polling", "provisioning" };
+    const char *values[] = { "vent_manual", "vent_auto", "vent_calibrate", "source_status",
+                            "polling", "provisioning", "printer_fans" };
     for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); ++i)
         cJSON_AddItemToArray(caps, cJSON_CreateString(values[i]));
     cJSON *ui = cJSON_AddObjectToObject(root, "ui");
@@ -291,6 +306,25 @@ static esp_err_t command_post(httpd_req_t *req)
         dv_motor_target_t value = !strcmp(target->valuestring, "open") ? DV_MOTOR_TARGET_OPEN : DV_MOTOR_TARGET_CLOSED;
         err = dv_policy_set_mode(DV_POLICY_MODE_MANUAL);
         if (err == ESP_OK) err = dv_policy_set_manual_target(value);
+    } else if (!strcmp(name->valuestring, "fan")) {
+        // {"command":{"name":"fan","percent":0..100}} -> M106 P3 S0..255.
+        // Chamber exhaust only. Part cooling and aux stay read-only: driving
+        // those mid-print changes layer quality, and nothing here is worth that.
+        if (dc_source_get() != DC_SRC_BAMBU) {
+            cJSON_Delete(body);
+            return api_error(req, "409 Conflict", "fan control needs the Bambu source");
+        }
+        cJSON *pct = cJSON_GetObjectItemCaseSensitive(command, "percent");
+        if (!cJSON_IsNumber(pct) || pct->valuedouble < 0 || pct->valuedouble > 100) {
+            cJSON_Delete(body);
+            return api_error(req, "400 Bad Request", "percent must be 0-100");
+        }
+        int s255 = (int)((pct->valuedouble * 255.0) / 100.0 + 0.5);
+        if (s255 < 0) s255 = 0;
+        if (s255 > 255) s255 = 255;
+        char line[32];
+        snprintf(line, sizeof line, "M106 P3 S%d", s255);
+        err = dc_bambu_send_gcode(line);
     } else if (!strcmp(name->valuestring, "calibrate")) {
         err = dv_motor_recalibrate();   // sweeps open→closed, re-learns endstops
     } else {

@@ -1,0 +1,3 @@
+# Build outputs and transfer artifacts. The source in firmware/ reproduces them.
+*.bin
+*.tgz

@@ -23,7 +23,7 @@ static const char *TAG = "dragonvent";
 static esp_err_t configure_network_identity(void)
 {
     const dc_wifi_identity_t identity = {
-        .hostname = "dragonvent",
+        .hostname = "vent1",
         .instance_name = "DragonVent",
         .ap_ssid_prefix = "DragonVent_",
         .ap_password = DC_WIFI_DEFAULT_AP_PASSWORD,

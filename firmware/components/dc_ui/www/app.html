@@ -1184,7 +1184,7 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
       <section class="vent-view vent-mode-page" data-vent-content="video" data-capability="video">
         <div>
           <h3>Camera</h3>
-          <p class="set-note">Live view from the printer's built-in camera, relayed by a proxy on your network. The printer will only serve this when LAN Mode Liveview is enabled.</p>
+          <p class="set-note">Live view from any MJPEG camera on your network. Bambu P1 and X1 printers can be relayed with <code>tools/camproxy.py</code>. The P2S and the rest of the H2 generation stream over proprietary BRTC/TUTK and expose no local stream, so those need a separate camera.</p>
         </div>
 
         <div class="cam-frame">
@@ -1202,7 +1202,7 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
 
         <article class="set-card">
           <h3>Proxy address</h3>
-          <p class="set-note">Run <code>camproxy.py</code> on a machine that stays on, then put its stream URL here. Example: <code>http://192.168.1.50:8766/stream.mjpeg</code></p>
+          <p class="set-note">Any MJPEG stream URL works. For a P1 or X1, run <code>tools/camproxy.py</code> on a machine that stays on and use its address. Example: <code>http://192.168.1.50:8766/stream.mjpeg</code></p>
           <input class="form-input" id="dv-cam-url" type="url" placeholder="http://host:8766/stream.mjpeg" spellcheck="false" autocomplete="off">
           <button class="btn btn-primary btn-block" type="button" id="dv-cam-save"><svg class="icon"><use href="#i-refresh"/></svg> Save proxy address</button>
           <div class="mode-feedback" id="dv-cam-msg" role="status" aria-live="polite"></div>

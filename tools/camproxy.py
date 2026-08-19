@@ -44,11 +44,20 @@ USERNAME    = os.environ.get("CAM_USER",    "bblp")   # fixed for all Bambu prin
 CAM_PORT    = int(os.environ.get("CAM_PORT", "6000"))
 PORT        = int(os.environ.get("PROXY_PORT", "8766"))
 
-# The printer answers a refusal as a 16-byte header + a 4-byte payload of
-# 0xFFFFFFFF. Seen on a P2S in cloud mode: liveview is gated behind the
-# printer's LAN settings, and the refusal is identical whether the printer is
-# idle or printing, and whether user/code are in the documented order or
-# swapped. So treat it as policy, not as a handshake bug, and say so.
+# A 16-byte header + a 4-byte 0xFFFFFFFF payload means the printer will not
+# serve this protocol. Measured on a P2S: the reply is identical idle or
+# printing, and identical with the username and access code swapped, so it is
+# not an auth or ordering problem.
+#
+# It is a generation problem. Port 6000 length-prefixed JPEG is the P1/X1
+# scheme. The P2S and the rest of the H2 generation report brtc_service=enable
+# and tutk_server=enable, and stream over BRTC/TUTK on UDP instead — confirmed
+# by watching Bambu Studio, which pushes ~200 KB/s through an unconnected UDP
+# socket while both its TCP connections sit idle. TUTK is ThroughTek's
+# proprietary P2P video SDK, so there is no local stream here to relay.
+#
+# This proxy therefore works with P1 and X1 printers. For a P2S, point the
+# Video tab at a separate MJPEG camera instead; it takes any MJPEG URL.
 REFUSAL = 0xFFFFFFFF
 
 STATE = {
@@ -121,14 +130,15 @@ def reader():
                     # A 4-byte 0xFFFFFFFF body is the refusal, not a picture.
                     if n == 4 and struct.unpack("<I", payload)[0] == REFUSAL:
                         set_err(
-                            "printer refused the camera stream (-1). Enable LAN Mode "
-                            "Liveview on the printer; on current firmware that generally "
-                            "means switching it to LAN Only Mode.",
+                            "This printer does not serve the port-6000 JPEG stream. That "
+                            "protocol is P1/X1 only; the P2S and H2 generation use BRTC/TUTK "
+                            "over UDP, which cannot be relayed. Point the Video tab at a "
+                            "separate MJPEG camera instead.",
                             refused=True)
                         raise ConnectionError("refused")
                     if n == 8 and payload[:4] == b"\xff\xff\xff\xff":
-                        set_err("printer refused the camera stream (-1). "
-                                "Enable LAN Mode Liveview on the printer.", refused=True)
+                        set_err("This printer does not serve the port-6000 JPEG stream "
+                                "(P1/X1 only). Use a separate MJPEG camera.", refused=True)
                         raise ConnectionError("refused")
 
                     if payload[:2] != b"\xff\xd8":

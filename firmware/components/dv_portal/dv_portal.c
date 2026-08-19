@@ -37,8 +37,6 @@ static uint32_t s_api_revision = 1;
 // real authentication.
 #define DV_NVS_NS       "app_nvs"
 #define DV_NVS_TOKEN    "ctl_token"
-#define DV_NVS_VIDEO    "video_url"
-#define DV_VIDEO_MAX    160
 #define DV_TOKEN_MAX    64
 // dragon-core >= v0.8.0 sends both names with the same value. Prefer the
 // family-neutral one; accept the legacy name so an older SPA or an existing
@@ -54,34 +52,6 @@ static void ctl_token(char *out, size_t outsz)
     size_t sz = outsz;
     nvs_get_str(h, DV_NVS_TOKEN, out, &sz);   // leaves out="" on any error
     nvs_close(h);
-}
-
-/* Where the Video tab points its <img>. The printer's camera lives behind a raw
-   TLS socket a browser cannot open, so a proxy on the LAN re-serves it as MJPEG
-   and this is that proxy's URL. Empty renders the tab's "not configured" state.
-   Stored rather than compiled in: the proxy host is a property of the network,
-   not of the firmware. */
-static void video_url(char *out, size_t outsz)
-{
-    out[0] = '\0';
-    nvs_handle_t h;
-    if (nvs_open(DV_NVS_NS, NVS_READONLY, &h) != ESP_OK) return;
-    size_t len = outsz;
-    if (nvs_get_str(h, DV_NVS_VIDEO, out, &len) != ESP_OK) out[0] = '\0';
-    nvs_close(h);
-}
-
-static esp_err_t video_url_set(const char *url)
-{
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(DV_NVS_NS, NVS_READWRITE, &h);
-    if (err != ESP_OK) return err;
-    err = (url && url[0]) ? nvs_set_str(h, DV_NVS_VIDEO, url)
-                          : nvs_erase_key(h, DV_NVS_VIDEO);
-    if (err == ESP_ERR_NVS_NOT_FOUND) err = ESP_OK;   /* clearing an unset key is fine */
-    if (err == ESP_OK) err = nvs_commit(h);
-    nvs_close(h);
-    return err;
 }
 
 // Read whichever auth header is present into out. Returns false if neither is
@@ -264,12 +234,6 @@ static cJSON *make_state(void)
     cJSON_AddNumberToObject(fans, "heatbreak", f.heatbreak);
     cJSON_AddNumberToObject(fans, "scale", 15);
     cJSON_AddBoolToObject(fans, "writable", source == DC_SRC_BAMBU && connected);
-
-    char vurl[DV_VIDEO_MAX + 1];
-    video_url(vurl, sizeof vurl);
-    cJSON *video = cJSON_AddObjectToObject(root, "video");
-    cJSON_AddStringToObject(video, "url", vurl);
-    cJSON_AddBoolToObject(video, "configured", vurl[0] != '\0');
     // Whatever the printer said about the last gcode we sent. Bambu firmware
     // rejects third-party gcode_line with "mqtt message verify failed"; without
     // this the Fans screen reports a cheerful success while the printer discards
@@ -309,7 +273,7 @@ static esp_err_t info_get(httpd_req_t *req)
     add_device_id(root);
     cJSON *caps = cJSON_AddArrayToObject(root, "capabilities");
     const char *values[] = { "vent_manual", "vent_auto", "vent_calibrate", "source_status",
-                            "polling", "provisioning", "printer_fans", "video" };
+                            "polling", "provisioning", "printer_fans" };
     for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); ++i)
         cJSON_AddItemToArray(caps, cJSON_CreateString(values[i]));
     cJSON *ui = cJSON_AddObjectToObject(root, "ui");
@@ -390,9 +354,6 @@ static esp_err_t settings_get(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "api_version", 2);
     cJSON_AddNumberToObject(root, "bed_open_c", open_c);
     cJSON_AddNumberToObject(root, "bed_close_c", close_c);
-    char vurl[DV_VIDEO_MAX + 1];
-    video_url(vurl, sizeof vurl);
-    cJSON_AddStringToObject(root, "video_url", vurl);
     return send_json(req, root);
 }
 
@@ -402,28 +363,6 @@ static esp_err_t settings_post(httpd_req_t *req)
     cJSON *body = recv_json(req);
     cJSON *open = body ? cJSON_GetObjectItemCaseSensitive(body, "bed_open_c") : NULL;
     cJSON *close = body ? cJSON_GetObjectItemCaseSensitive(body, "bed_close_c") : NULL;
-    cJSON *vid = body ? cJSON_GetObjectItemCaseSensitive(body, "video_url") : NULL;
-
-    /* video_url is independently settable. The Video tab saves only its own
-       field, and requiring the bed thresholds alongside it would make saving a
-       camera URL silently rewrite the vent policy. */
-    if (cJSON_IsString(vid)) {
-        if (strlen(vid->valuestring) > DV_VIDEO_MAX) {
-            cJSON_Delete(body);
-            return api_error(req, "400 Bad Request", "video_url is too long");
-        }
-        if (video_url_set(vid->valuestring) != ESP_OK) {
-            cJSON_Delete(body);
-            return api_error(req, "500 Internal Server Error", "could not save video_url");
-        }
-        if (!cJSON_IsNumber(open) && !cJSON_IsNumber(close)) {
-            cJSON_Delete(body);
-            ++s_api_revision;
-            cJSON *r = cJSON_CreateObject();
-            cJSON_AddItemToObject(r, "state", make_state());
-            return send_json(req, r);
-        }
-    }
     if (!cJSON_IsNumber(open) || !cJSON_IsNumber(close)) { cJSON_Delete(body); return api_error(req, "400 Bad Request", "bed_open_c and bed_close_c are required"); }
     float open_c = (float)open->valuedouble, close_c = (float)close->valuedouble;
     cJSON_Delete(body);

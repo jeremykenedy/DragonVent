@@ -479,23 +479,8 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
 .vent-main[data-vent-page="manual"] [data-vent-content="manual"],
 .vent-main[data-vent-page="auto"] [data-vent-content="auto"],
 .vent-main[data-vent-page="fans"] [data-vent-content="fans"],
-.vent-main[data-vent-page="video"] [data-vent-content="video"],
 .vent-main[data-vent-page="lighting"] [data-vent-content="lighting"],
 .vent-main[data-vent-page="settings"] [data-vent-content="settings"]{ display:flex; }
-/* Camera. The stream is a live MJPEG connection held open by the <img>, so it
-   is only attached while this page is showing (see ventActivatePage) — leaving
-   it wired in the background would keep a socket open on the proxy forever. */
-.cam-frame{ position:relative; width:100%; background:#000; border:1px solid var(--border);
-  border-radius:5px; overflow:hidden; aspect-ratio:16/9; display:flex;
-  align-items:center; justify-content:center; }
-.cam-frame img{ width:100%; height:100%; object-fit:contain; display:block; }
-.cam-frame img[hidden]{ display:none; }
-.cam-placeholder{ position:absolute; inset:0; display:flex; flex-direction:column;
-  align-items:center; justify-content:center; gap:8px; padding:18px; text-align:center;
-  color:var(--muted-foreground); font-size:13px; }
-.cam-placeholder svg.icon{ width:34px; height:34px; opacity:.5; }
-.cam-meta{ display:flex; gap:14px; flex-wrap:wrap; font-size:12px;
-  color:var(--muted-foreground); margin-top:8px; font-variant-numeric:tabular-nums; }
 .vent-home{ flex-direction:column; gap:9px; overflow:auto; }
 .vent-grid{ min-height:0; display:grid; grid-template-columns:minmax(0,1.15fr) minmax(190px,.85fr);
   grid-template-rows:minmax(180px,1fr) auto; gap:9px; }
@@ -617,7 +602,6 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
   <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M21 21v-5h-5"/></symbol>
   <symbol id="i-wind" viewBox="0 0 24 24"><path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8A2.5 2.5 0 1 1 19.5 12H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/></symbol>
   <symbol id="i-spool" viewBox="0 0 24 24"><rect x="4" y="3" width="3" height="18" rx="1"/><rect x="17" y="3" width="3" height="18" rx="1"/><path d="M7 8h10M7 12h10M7 16h10"/></symbol>
-  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2a1.5 1.5 0 0 0 1.25-.67l.6-.9A1.5 1.5 0 0 1 9.8 4.8h4.4a1.5 1.5 0 0 1 1.25.67l.6.9A1.5 1.5 0 0 0 17.3 7h2.2A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5Z"/><circle cx="12" cy="13" r="3.6"/></symbol>
   <symbol id="i-fan" viewBox="0 0 24 24"><path d="M10.827 16.379a6.082 6.082 0 0 1-8.618-7.002l5.412 1.45a6.082 6.082 0 0 1 7.002-8.618l-1.45 5.412a6.082 6.082 0 0 1 8.618 7.002l-5.412-1.45a6.082 6.082 0 0 1-7.002 8.618l1.45-5.412Z"/><path d="M12 12v.01"/></symbol>
   <symbol id="i-settings" viewBox="0 0 24 24"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></symbol>
   <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></symbol>
@@ -1051,7 +1035,6 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
       <button class="tab vent-tab" type="button" data-vent-page="manual" aria-selected="false" aria-label="Manual vent control"><svg class="icon"><use href="#i-vent"/></svg></button>
       <button class="tab vent-tab" type="button" data-vent-page="auto" aria-selected="false" aria-label="Automatic vent policy"><svg class="icon"><use href="#i-refresh"/></svg></button>
       <button class="tab vent-tab" type="button" data-vent-page="fans" data-capability="printer_fans" aria-selected="false" aria-label="Printer fans"><svg class="icon"><use href="#i-fan"/></svg></button>
-      <button class="tab vent-tab" type="button" data-vent-page="video" data-capability="video" aria-selected="false" aria-label="Camera"><svg class="icon"><use href="#i-camera"/></svg></button>
       <button class="tab vent-tab" type="button" data-vent-page="lighting" aria-selected="false" aria-label="Lighting"><svg class="icon"><use href="#i-bulb"/></svg></button>
       <button class="tab vent-tab" type="button" data-vent-page="settings" aria-selected="false" aria-label="Settings"><svg class="icon"><use href="#i-settings"/></svg></button>
     </nav>
@@ -1174,38 +1157,6 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
             <div><dt>Part cooling</dt><dd id="dv-fan-r-part">--</dd></div>
             <div><dt>Heatbreak</dt><dd id="dv-fan-r-heatbreak">--</dd></div>
           </dl>
-        </article>
-      </section>
-
-      <!-- Camera. The printer serves its stream over a raw TLS socket on port
-           6000 that no browser can open, so this points at a small LAN proxy
-           that re-serves it as MJPEG. The proxy address is stored on the device
-           because it is a property of the network, not of the firmware. -->
-      <section class="vent-view vent-mode-page" data-vent-content="video" data-capability="video">
-        <div>
-          <h3>Camera</h3>
-          <p class="set-note">Live view from any MJPEG camera on your network. Bambu P1 and X1 printers can be relayed with <code>tools/camproxy.py</code>. The P2S and the rest of the H2 generation stream over proprietary BRTC/TUTK and expose no local stream, so those need a separate camera.</p>
-        </div>
-
-        <div class="cam-frame">
-          <img id="dv-cam" alt="Printer camera" hidden>
-          <div class="cam-placeholder" id="dv-cam-placeholder">
-            <svg class="icon"><use href="#i-camera"/></svg>
-            <span id="dv-cam-placeholder-text">No proxy configured.</span>
-          </div>
-        </div>
-        <div class="cam-meta">
-          <span id="dv-cam-state">&mdash;</span>
-          <span id="dv-cam-fps"></span>
-          <span id="dv-cam-frames"></span>
-        </div>
-
-        <article class="set-card">
-          <h3>Proxy address</h3>
-          <p class="set-note">Any MJPEG stream URL works. For a P1 or X1, run <code>tools/camproxy.py</code> on a machine that stays on and use its address. Example: <code>http://192.168.1.50:8766/stream.mjpeg</code></p>
-          <input class="form-input" id="dv-cam-url" type="url" placeholder="http://host:8766/stream.mjpeg" spellcheck="false" autocomplete="off">
-          <button class="btn btn-primary btn-block" type="button" id="dv-cam-save"><svg class="icon"><use href="#i-refresh"/></svg> Save proxy address</button>
-          <div class="mode-feedback" id="dv-cam-msg" role="status" aria-live="polite"></div>
         </article>
       </section>
 
@@ -1959,7 +1910,6 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
     });
     if(page==='lighting') loadLighting();
     if(page==='auto') loadFilament();
-    if(page==='video') camAttach(); else camDetach();
   }
 
   function rgbToHex(a){ function h(n){ return ('0'+((n||0)&255).toString(16)).slice(-2); }
@@ -2056,7 +2006,6 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
     if(rc){ rc.disabled=calibrating;
       rc.innerHTML='<svg class="icon"><use href="#i-refresh"/></svg> '+(calibrating?'Calibrating…':'Recalibrate vent'); }
     applyFans(s);
-    applyVideo(s);
     ventSetConn(true);
   }
   /* ---- Printer fans ------------------------------------------------------
@@ -2108,71 +2057,6 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
       }
     }
   }
-  /* ---- Camera -------------------------------------------------------------
-     The <img> holds a live MJPEG connection for as long as it has a src, so it
-     is attached on entering this page and torn down on leaving. Leaving it
-     wired in the background would pin a socket open on the proxy for the life
-     of the tab. */
-  var camUrl = '', camTimer = null;
-  function camOrigin(u){ try { return new URL(u).origin; } catch(e){ return ''; } }
-  function camPlaceholder(text){
-    var img=$('dv-cam'), ph=$('dv-cam-placeholder'), t=$('dv-cam-placeholder-text');
-    if(img){ img.hidden = true; img.removeAttribute('src'); }
-    if(ph) ph.hidden = false;
-    if(t) t.textContent = text;
-  }
-  function camMeta(state, fps, frames){
-    var e;
-    if((e=$('dv-cam-state')))  e.textContent = state || '\u2014';
-    if((e=$('dv-cam-fps')))    e.textContent = fps    ? fps + ' fps' : '';
-    if((e=$('dv-cam-frames'))) e.textContent = frames ? frames + ' frames' : '';
-  }
-  function camPoll(){
-    var origin = camOrigin(camUrl);
-    if(!origin) return;
-    fetch(origin + '/status', {cache:'no-store'})
-      .then(function(r){ return r.json(); })
-      .then(function(st){
-        if(st.refused){
-          camPlaceholder(st.last_error || 'Printer refused the camera stream.');
-          camMeta('printer refused', 0, st.frames);
-        } else if(!st.connected){
-          camPlaceholder(st.last_error || 'Proxy is not connected to the printer.');
-          camMeta('proxy up, printer not streaming', 0, st.frames);
-        } else {
-          camMeta('live', st.fps, st.frames);
-        }
-      })
-      .catch(function(){ camMeta('proxy status unreachable', 0, 0); });
-  }
-  function camAttach(){
-    var img=$('dv-cam'), ph=$('dv-cam-placeholder');
-    if(!img) return;
-    if(!camUrl){ camPlaceholder('No proxy configured. Add its address below.'); return; }
-    img.onerror = function(){ camPlaceholder('Could not reach the proxy at ' + camUrl); };
-    img.onload  = function(){ if(ph) ph.hidden = true; img.hidden = false; };
-    img.hidden = false;
-    if(ph) ph.hidden = true;
-    img.src = camUrl + (camUrl.indexOf('?') < 0 ? '?' : '&') + 't=' + Date.now();
-    camPoll();
-    if(!camTimer) camTimer = setInterval(camPoll, 3000);
-  }
-  function camDetach(){
-    var img=$('dv-cam');
-    if(img){ img.removeAttribute('src'); img.hidden = true; }   // drops the MJPEG socket
-    if(camTimer){ clearInterval(camTimer); camTimer = null; }
-  }
-  function applyVideo(s){
-    var v = s && s.video; if(!v) return;
-    var box = $('dv-cam-url');
-    // Do not clobber the field while it is being edited.
-    if(box && document.activeElement !== box) box.value = v.url || '';
-    if(v.url !== camUrl){
-      camUrl = v.url || '';
-      if($('dv-main') && $('dv-main').dataset.ventPage === 'video') camAttach();
-    }
-  }
-
   function fanSet(pct){
     fanPct = Math.max(0, Math.min(100, Math.round(pct)));
     fanTouched = Date.now();
@@ -2864,19 +2748,6 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
   $('dv-manual-open').addEventListener('click',function(){ doVentManual('open','dv-manual-msg'); });
   $('dv-manual-close').addEventListener('click',function(){ doVentManual('closed','dv-manual-msg'); });
   $('dv-auto').addEventListener('click',function(){ ventCommand('auto').catch(function(){}); });
-  if($('dv-cam-save')){
-    $('dv-cam-save').addEventListener('click',function(){
-      var u = $('dv-cam-url').value.trim();
-      ventFlash('dv-cam-msg','Saving\u2026');
-      ventPost('/api/v2/settings',{api_version:2, video_url:u})
-        .then(function(){
-          camUrl = u;
-          ventFlash('dv-cam-msg', u ? 'Saved. Connecting to the proxy\u2026' : 'Cleared.','is-ok');
-          camAttach();
-        })
-        .catch(function(j){ ventFlash('dv-cam-msg',(j&&j.message)||'Could not save.','is-error'); });
-    });
-  }
   if($('dv-fan-range')){
     $('dv-fan-down').addEventListener('click',function(){ fanSet(fanPct - 5); });
     $('dv-fan-up').addEventListener('click',function(){ fanSet(fanPct + 5); });

@@ -52,7 +52,11 @@ static const char *TAG = "dc_bambu";
 // its RX buffer; we reassemble up to RX_CAP (bed_temper is near the front of the
 // print object, so a truncated tail still yields the follow signal).
 #define MQTT_BUF   8192
-#define RX_CAP     16384
+// Measured on a P2S with AMS: a pushall report is 18,922 bytes, so the old
+// 16 KB cap silently dropped everything past that offset — wifi_signal (18519)
+// and subtask_name (16402) among them. They parsed as absent, not as wrong,
+// which is exactly the failure mode that hides. 32 KB leaves real headroom.
+#define RX_CAP     32768
 
 // One pushall on connect; required on P1/A1 (delta-only), harmless on X1.
 static const char PUSHALL[] =
@@ -126,6 +130,25 @@ static bool find_float(const char *s, const char *key, float *out)
 // Same targeted scan, but for the fan speeds, which Bambu emits as QUOTED
 // integers ("big_fan2_speed":"15"). find_float() strtof's straight from the
 // colon and bails on the opening quote, so it can never read these.
+// Bambu is inconsistent about quoting numbers: "spd_lvl": 2 but
+// "nozzle_diameter": "0.4" and "mc_print_error_code": "0". find_float() strtof's
+// straight from the colon and bails on the opening quote, so quoted numerics
+// silently read as absent. This tolerates either form.
+static bool find_num(const char *s, const char *key, float *out)
+{
+    const char *q = strstr(s, key);
+    if (!q) return false;
+    q = strchr(q, ':');
+    if (!q) return false;
+    q++;
+    while (*q == ' ' || *q == '\t' || *q == '"') q++;
+    char *end;
+    float v = strtof(q, &end);
+    if (end == q) return false;
+    *out = v;
+    return true;
+}
+
 static bool find_quoted_int(const char *s, const char *key, int *out)
 {
     const char *q = strstr(s, key);
@@ -144,6 +167,33 @@ static bool find_quoted_int(const char *s, const char *key, int *out)
 
 static dc_bambu_fans_t s_fans = { -1, -1, -1, -1 };
 static char s_gcode_err[64] = "";
+
+// Find a float inside a named object rather than at top level. The H2
+// generation moved chamber temperature out of a flat "chamber_temper" and into
+// device.ctc.info.temp, so on a P2S the flat key is simply absent and chamber
+// temp read as nothing. Scan forward from the object key rather than parsing.
+static bool find_float_in(const char *s, const char *obj, const char *key, float *out)
+{
+    const char *o = strstr(s, obj);
+    if (!o) return false;
+    const char *q = strstr(o, key);
+    if (!q) return false;
+    q = strchr(q, ':');
+    if (!q) return false;
+    char *end;
+    float v = strtof(q + 1, &end);
+    if (end == q + 1) return false;
+    *out = v;
+    return true;
+}
+
+// Display-only detail. NAN / -1 mean "never reported", so a consumer can tell
+// an absent field from a real zero.
+static dc_bambu_detail_t s_detail = {
+    .nozzle_temp = NAN, .nozzle_target = NAN, .bed_target = NAN, .chamber_temp = NAN,
+    .layer = -1, .total_layers = -1, .remaining_min = -1, .wifi_dbm = 1,
+    .speed_level = -1, .nozzle_diameter = NAN, .error_code = -1,
+};
 
 static void parse_report(const char *json)
 {
@@ -169,6 +219,35 @@ static void parse_report(const char *json)
     bool got_fcham = find_quoted_int(json, "\"big_fan2_speed\"",      &fcham);
     bool got_fhb   = find_quoted_int(json, "\"heatbreak_fan_speed\"", &fhb);
 
+    float df; char sbuf[64];
+    dc_bambu_detail_t nd = { .nozzle_temp = NAN, .nozzle_target = NAN, .bed_target = NAN,
+                             .chamber_temp = NAN, .layer = -1, .total_layers = -1,
+                             .remaining_min = -1, .wifi_dbm = 1, .speed_level = -1,
+                             .nozzle_diameter = NAN, .error_code = -1 };
+    bool nd_any = false;
+    #define SCAN_F(key, field) do { if (find_num(json, key, &df)) { nd.field = df; nd_any = true; } } while (0)
+    #define SCAN_I(key, field) do { if (find_num(json, key, &df)) { nd.field = (int)df; nd_any = true; } } while (0)
+    SCAN_F("\"nozzle_temper\"",       nozzle_temp);
+    SCAN_F("nozzle_target_temper",    nozzle_target);
+    SCAN_F("bed_target_temper",       bed_target);
+    SCAN_I("\"layer_num\"",           layer);
+    SCAN_I("\"total_layer_num\"",     total_layers);
+    SCAN_I("\"mc_remaining_time\"",   remaining_min);
+    SCAN_I("\"spd_lvl\"",             speed_level);
+    SCAN_F("\"nozzle_diameter\"",     nozzle_diameter);
+    SCAN_I("\"mc_print_error_code\"", error_code);
+    #undef SCAN_F
+    #undef SCAN_I
+    if (got_cham) { nd.chamber_temp = cham; nd_any = true; }
+    else if (find_float_in(json, "\"ctc\"", "\"temp\"", &df)) { nd.chamber_temp = df; nd_any = true; }
+    // wifi_signal arrives as a string like "-40dBm"; strtol stops at the unit.
+    if (dc_bambu_find_string(json, "\"wifi_signal\"", sbuf, sizeof sbuf)) {
+        nd.wifi_dbm = (int)strtol(sbuf, NULL, 10); nd_any = true; }
+    // Read straight into the destination so the field's own size bounds the
+    // copy; going via a wider scratch buffer just invites a truncation warning.
+    if (dc_bambu_find_string(json, "\"nozzle_type\"",  nd.nozzle_type, sizeof nd.nozzle_type)) nd_any = true;
+    if (dc_bambu_find_string(json, "\"subtask_name\"", nd.job_name,    sizeof nd.job_name))    nd_any = true;
+
     // gcode_line acknowledgement. Arrives on the same report topic as status:
     //   {"print":{"command":"gcode_line","result":"failed",
     //             "reason":"mqtt message verify failed","sequence_id":"802"}}
@@ -188,6 +267,24 @@ static void parse_report(const char *json)
             snprintf(s_gcode_err, sizeof s_gcode_err, "%s", ack_why);
             ESP_LOGW(TAG, "printer rejected gcode: %s", s_gcode_err);
         }
+    }
+    if (nd_any) {
+        // Deltas omit most keys, so merge field by field instead of assigning
+        // the struct wholesale — otherwise every partial report would blank
+        // everything it happened not to mention.
+        if (!isnan(nd.nozzle_temp))     s_detail.nozzle_temp     = nd.nozzle_temp;
+        if (!isnan(nd.nozzle_target))   s_detail.nozzle_target   = nd.nozzle_target;
+        if (!isnan(nd.bed_target))      s_detail.bed_target      = nd.bed_target;
+        if (!isnan(nd.chamber_temp))    s_detail.chamber_temp    = nd.chamber_temp;
+        if (!isnan(nd.nozzle_diameter)) s_detail.nozzle_diameter = nd.nozzle_diameter;
+        if (nd.layer         >= 0) s_detail.layer         = nd.layer;
+        if (nd.total_layers  >= 0) s_detail.total_layers  = nd.total_layers;
+        if (nd.remaining_min >= 0) s_detail.remaining_min = nd.remaining_min;
+        if (nd.speed_level   >= 0) s_detail.speed_level   = nd.speed_level;
+        if (nd.error_code    >= 0) s_detail.error_code    = nd.error_code;
+        if (nd.wifi_dbm      <= 0) s_detail.wifi_dbm      = nd.wifi_dbm;
+        if (nd.nozzle_type[0]) snprintf(s_detail.nozzle_type, sizeof s_detail.nozzle_type, "%s", nd.nozzle_type);
+        if (nd.job_name[0])    snprintf(s_detail.job_name,    sizeof s_detail.job_name,    "%s", nd.job_name);
     }
     if (got_fpart) s_fans.part      = fpart;
     if (got_faux)  s_fans.aux       = faux;
@@ -396,6 +493,16 @@ esp_err_t dc_bambu_get_fans(dc_bambu_fans_t *out)
     if (!s_lock) { *out = (dc_bambu_fans_t){ -1, -1, -1, -1 }; return ESP_ERR_INVALID_STATE; }
     xSemaphoreTake(s_lock, portMAX_DELAY);
     *out = s_fans;
+    xSemaphoreGive(s_lock);
+    return ESP_OK;
+}
+
+esp_err_t dc_bambu_get_detail(dc_bambu_detail_t *out)
+{
+    if (!out) return ESP_ERR_INVALID_ARG;
+    if (!s_lock) return ESP_ERR_INVALID_STATE;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    *out = s_detail;
     xSemaphoreGive(s_lock);
     return ESP_OK;
 }

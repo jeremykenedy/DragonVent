@@ -221,6 +221,35 @@ static cJSON *make_state(void)
     else cJSON_AddNumberToObject(printer, "bed_temperature_c", bed);
     cJSON_AddStringToObject(printer, "material", material);
 
+    // Display-only detail from the Bambu report. Absent fields are emitted as
+    // null rather than 0 or -1 so the UI can render an em dash instead of a
+    // number the printer never actually sent.
+    if (source == DC_SRC_BAMBU) {
+        dc_bambu_detail_t d;
+        if (dc_bambu_get_detail(&d) == ESP_OK) {
+            #define NUMF(k, v) do { if (isnan(v)) cJSON_AddNullToObject(printer, k); \
+                                    else cJSON_AddNumberToObject(printer, k, v); } while (0)
+            #define NUMI(k, v) do { if ((v) < 0) cJSON_AddNullToObject(printer, k); \
+                                    else cJSON_AddNumberToObject(printer, k, v); } while (0)
+            NUMF("nozzle_temperature_c", d.nozzle_temp);
+            NUMF("nozzle_target_c",      d.nozzle_target);
+            NUMF("bed_target_c",         d.bed_target);
+            NUMF("chamber_temperature_c", d.chamber_temp);
+            NUMF("nozzle_diameter_mm",   d.nozzle_diameter);
+            NUMI("layer",                d.layer);
+            NUMI("total_layers",         d.total_layers);
+            NUMI("remaining_min",        d.remaining_min);
+            NUMI("speed_level",          d.speed_level);
+            NUMI("error_code",           d.error_code);
+            #undef NUMF
+            #undef NUMI
+            if (d.wifi_dbm <= 0) cJSON_AddNumberToObject(printer, "wifi_dbm", d.wifi_dbm);
+            else                 cJSON_AddNullToObject(printer, "wifi_dbm");
+            cJSON_AddStringToObject(printer, "nozzle_type", d.nozzle_type);
+            cJSON_AddStringToObject(printer, "job_name",    d.job_name);
+        }
+    }
+
     // Printer fans. Read-only for every source except Bambu, where the Fans
     // screen can also drive the chamber exhaust. Speeds are Bambu's native 0..15
     // steps; -1 means no report has carried that field yet. `writable` tells the

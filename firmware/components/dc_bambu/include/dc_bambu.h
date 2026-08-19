@@ -74,6 +74,26 @@ typedef struct {
 // Latest fan speeds seen in the report stream.
 esp_err_t dc_bambu_get_fans(dc_bambu_fans_t *out);
 
+// ---- Extra report detail, for display only ------------------------------
+// Everything here is read straight out of the status report and never acted
+// on. Floats are NAN and ints are -1 when the field has not been seen, so a
+// consumer can tell "not reported" from a real zero.
+typedef struct {
+    float nozzle_temp, nozzle_target;
+    float bed_target;
+    float chamber_temp;        // flat chamber_temper, else device.ctc.info.temp
+    int   layer, total_layers;
+    int   remaining_min;
+    int   wifi_dbm;
+    int   speed_level;         // 1 silent .. 4 ludicrous
+    float nozzle_diameter;
+    char  nozzle_type[12];
+    char  job_name[64];
+    int   error_code;
+} dc_bambu_detail_t;
+
+esp_err_t dc_bambu_get_detail(dc_bambu_detail_t *out);
+
 // Send one gcode line to the printer's request topic.
 //
 // NOTE: this is the ONLY control path in the Dragon firmware that writes to a

@@ -482,6 +482,19 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
 .vent-main[data-vent-page="lighting"] [data-vent-content="lighting"],
 .vent-main[data-vent-page="settings"] [data-vent-content="settings"]{ display:flex; }
 .vent-home{ flex-direction:column; gap:9px; overflow:auto; }
+/* Print job card. Spans the grid so the job name has room to breathe; long
+   slicer filenames are the norm and truncating them to a column is useless. */
+.vent-job{ grid-column:1/-1; display:flex; flex-direction:column; gap:8px; }
+.vent-job-head{ display:flex; justify-content:space-between; align-items:baseline; gap:12px; }
+.vent-job-name{ font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; min-width:0; }
+.vent-job-pct{ font-variant-numeric:tabular-nums; color:var(--muted-foreground); font-size:13px; flex:none; }
+.vent-bar{ height:6px; border-radius:3px; background:color-mix(in srgb,var(--foreground) 12%,transparent);
+  overflow:hidden; }
+.vent-bar i{ display:block; height:100%; width:0; background:var(--primary);
+  transition:width .4s ease; }
+.vent-job-meta{ display:flex; flex-wrap:wrap; gap:4px 18px; font-size:12px;
+  color:var(--muted-foreground); font-variant-numeric:tabular-nums; }
 .vent-grid{ min-height:0; display:grid; grid-template-columns:minmax(0,1.15fr) minmax(190px,.85fr);
   grid-template-rows:minmax(180px,1fr) auto; gap:9px; }
 .vent-hero{ display:flex; align-items:center; gap:18px; }
@@ -1060,10 +1073,28 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
               <div><dt>Source</dt><dd id="dv-source">--</dd></div>
               <div><dt>Link</dt><dd id="dv-link">--</dd></div>
               <div><dt>Printer</dt><dd id="dv-printer">--</dd></div>
+              <div><dt>Nozzle</dt><dd id="dv-nozzle">--</dd></div>
               <div><dt>Bed</dt><dd id="dv-bed">--</dd></div>
+              <div><dt>Chamber</dt><dd id="dv-chamber">--</dd></div>
               <div><dt>Material</dt><dd id="dv-material">--</dd></div>
+              <div><dt>Fans</dt><dd id="dv-fanline">--</dd></div>
+              <div><dt>Wi-Fi</dt><dd id="dv-wifi">--</dd></div>
               <div><dt>Motor groups</dt><dd id="dv-groups">--</dd></div>
             </dl>
+          </article>
+
+          <article class="card vent-job" id="dv-job-card" hidden>
+            <div class="vent-job-head">
+              <span class="vent-job-name" id="dv-job-name">--</span>
+              <span class="vent-job-pct" id="dv-job-pct"></span>
+            </div>
+            <div class="vent-bar"><i id="dv-job-bar"></i></div>
+            <div class="vent-job-meta">
+              <span id="dv-job-layer"></span>
+              <span id="dv-job-eta"></span>
+              <span id="dv-job-speed"></span>
+              <span id="dv-job-nozzle"></span>
+            </div>
           </article>
 
           <div class="vent-actions" aria-label="Quick vent actions">
@@ -1983,6 +2014,46 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
     u('dv-printer', p.state||'unknown');
     u('dv-bed', p.bed_temperature_c==null?'--':Number(p.bed_temperature_c).toFixed(1)+' °C');
     u('dv-material', p.material||'--');
+
+    /* ---- Printer detail on the dashboard --------------------------------
+       Every field here is read-only report data. null means the printer never
+       sent it, which is different from zero, so those render as an em dash
+       rather than a misleading 0. */
+    var DASH = '\u2014';
+    function t1(x, unit){ return x==null ? DASH : Number(x).toFixed(1)+(unit||''); }
+    function pair(a, b, unit){
+      if(a==null && b==null) return DASH;
+      var l = a==null?DASH:Math.round(a), r = b==null?DASH:Math.round(b);
+      return l+' / '+r+(unit||'');
+    }
+    u('dv-nozzle',  pair(p.nozzle_temperature_c, p.nozzle_target_c, ' °C'));
+    u('dv-bed',     pair(p.bed_temperature_c,    p.bed_target_c,    ' °C'));
+    u('dv-chamber', t1(p.chamber_temperature_c, ' °C'));
+    u('dv-wifi',    p.wifi_dbm==null ? DASH : p.wifi_dbm+' dBm');
+
+    var f = s.fans || {};
+    var sc = f.scale || 15;
+    function fpc(x){ return (x==null||x<0) ? DASH : Math.round(x*100/sc)+'%'; }
+    u('dv-fanline', 'part '+fpc(f.part)+' · aux '+fpc(f.aux)+' · chamber '+fpc(f.chamber));
+
+    /* Job card. Hidden entirely when nothing is printing — an empty progress
+       bar reading 0% looks like a stalled print rather than an idle machine. */
+    var card = $('dv-job-card');
+    var active = p.state==='printing' && (p.layer!=null || p.job_name);
+    if(card) card.hidden = !active;
+    if(active){
+      u('dv-job-name', p.job_name || 'Printing');
+      var pct = (p.layer!=null && p.total_layers) ? Math.round(p.layer*100/p.total_layers) : null;
+      u('dv-job-pct', pct==null ? '' : pct+'%');
+      var bar = $('dv-job-bar');
+      if(bar) bar.style.width = (pct==null?0:pct)+'%';
+      u('dv-job-layer', (p.layer!=null && p.total_layers) ? 'layer '+p.layer+' / '+p.total_layers : '');
+      u('dv-job-eta',   p.remaining_min==null ? '' : fmtEta(p.remaining_min));
+      u('dv-job-speed', p.speed_level==null ? '' : (['','silent','standard','sport','ludicrous'][p.speed_level]||('speed '+p.speed_level)));
+      // 0.4 arrives as a float and prints as 0.4000000059604645 raw.
+      u('dv-job-nozzle', p.nozzle_diameter_mm==null ? '' :
+          Number(p.nozzle_diameter_mm).toFixed(2).replace(/0$/,'')+' mm'+(p.nozzle_type?' '+p.nozzle_type:''));
+    }
     u('dv-fil-current', p.material||'—');
     u('dv-groups', String(v.active_groups||0)+(running?' · moving':''));
     u('dv-version', s.firmware||'--');
@@ -2096,6 +2167,13 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
     var command={name:name};
     if(target) command.target=target;
     return ventPost('/api/v2/command',{api_version:2,command:command});
+  }
+  /* Minutes to something readable. The printer reports remaining time in whole
+     minutes, and a six-hour print showing "366 min" makes you do arithmetic. */
+  function fmtEta(min){
+    if(min==null || min<0) return '';
+    var h=Math.floor(min/60), m=min%60;
+    return (h>0 ? h+' h '+m+' m' : m+' m')+' left';
   }
   function ventFlash(id,msg,klass){
     var e=$(id); if(!e) return;

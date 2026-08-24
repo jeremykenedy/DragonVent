@@ -30,6 +30,10 @@ typedef enum {
     DV_FX_WAVE,        // brightness wave of the state color travelling the strip
     DV_FX_MARQUEE,     // theatre-chase of the state color
     DV_FX_CYLON,       // bouncing "eye" (Larson scanner) of the state color
+    DV_FX_PROGRESS,       // print progress fill of the state color (solid when no job)
+    DV_FX_PROGRESS_ANIM,  // progress fill with a chase and a breathing head pixel
+    DV_FX_STRIPED,        // two-color barber-pole crawling through the progress fill
+    DV_FX_CUSTOM,         // uploaded RAM animation (dv_rgb_set_frames)
 } dv_light_fx_t;
 
 // How the base color is chosen.
@@ -75,6 +79,19 @@ typedef struct {
                              // direction. Use when a strip is fed from the far
                              // connector so it runs opposite the other (e.g. lights
                              // "circle" the printer). Indexed by s_strips[] order.
+    // ---- appended v0.6.0 (older stored blobs keep defaults for all of this) ----
+    uint8_t per_state;       // printer mode: 0 = one global effect, 1 = effect per state
+    uint8_t fx_state[7];     // per-state effect, indexed by dv_printer_status_t
+    uint8_t br_state[7];     // per-state brightness; 0 = inherit the global value
+    uint8_t sp_state[7];     // per-state speed; 0 = inherit the global value
+    uint8_t dir_state[7];    // per-state animation direction: 0 forward, 1 reverse
+    uint8_t dir;             // animation direction outside per-state mode
+    uint8_t warn_on;         // hot-bed warning layer enabled
+    uint8_t warn_c;          // bed °C at/above which the warning layer takes over
+    uint8_t warn[3];         // warning color
+    uint8_t warn_blink;      // 1 = strobe the warning color instead of holding it
+    uint8_t stripe_b[3];     // second color of the striped progress effect
+    uint8_t stripe_w;        // stripe band width in pixels (1..15)
 } dv_lighting_t;
 
 // Detect the connected strips, load saved config, drive the initial color.
@@ -82,8 +99,13 @@ esp_err_t dv_rgb_start(void);
 
 // Feed current state to the lighting policy. target is a dv_motor_target_t;
 // status is a dv_printer_status_t (drives printer-mode color + the error flash);
-// bed_temp_c may be NAN when there's no printer/telemetry.
-void dv_rgb_update(int target, int status, float bed_temp_c);
+// bed_temp_c may be NAN when there's no printer/telemetry; progress is 0..1 or
+// negative when no job is active (drives the progress effects).
+void dv_rgb_update(int target, int status, float bed_temp_c, float progress);
+
+// Upload / clear the RAM animation played by DV_FX_CUSTOM (see dc_lighting).
+esp_err_t dv_rgb_set_frames(const uint8_t *rgb, uint16_t frames, uint16_t pixels, uint8_t fps);
+void dv_rgb_get_frames_info(uint16_t *frames, uint16_t *pixels, uint8_t *fps);
 
 // Get / set the lighting config. set persists to NVS and re-applies immediately.
 void      dv_rgb_get_config(dv_lighting_t *out);

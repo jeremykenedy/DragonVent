@@ -22,8 +22,21 @@ static const char *TAG = "dragonvent";
 
 static esp_err_t configure_network_identity(void)
 {
+    /* The hostname is NVS-backed ("hostname" in app_nvs, the stock namespace)
+     * with "vent1" as the compiled default. dc_wifi_set_identity() copies into
+     * a static buffer and must run before dc_wifi_start(), so this is the only
+     * place a stored hostname can take effect; changing it needs a reboot. */
+    static char hostname[32] = "vent1";
+    nvs_handle_t h;
+    if (nvs_open("app_nvs", NVS_READONLY, &h) == ESP_OK) {
+        char saved[32];
+        size_t len = sizeof saved;
+        if (nvs_get_str(h, "hostname", saved, &len) == ESP_OK && saved[0])
+            snprintf(hostname, sizeof hostname, "%s", saved);
+        nvs_close(h);
+    }
     const dc_wifi_identity_t identity = {
-        .hostname = "vent1",
+        .hostname = hostname,
         .instance_name = "DragonVent",
         .ap_ssid_prefix = "DragonVent_",
         .ap_password = DC_WIFI_DEFAULT_AP_PASSWORD,
@@ -63,10 +76,9 @@ static dv_motor_target_t flip(dv_motor_target_t t)
 
 static void reflect_mode_on_led(void)
 {
-    // Match stock: LED off in AUTO, blinking in MANUAL.
-    dv_status_led_set(dv_policy_get_mode() == DV_POLICY_MODE_AUTO
-                          ? DV_STATUS_LED_OFF
-                          : DV_STATUS_LED_BLINK);
+    // Stock behavior by default (off in AUTO, blinking in MANUAL); the stored
+    // ring policy in NVS can override either mode (off / solid / blink).
+    dv_status_led_apply_policy(dv_policy_get_mode() == DV_POLICY_MODE_AUTO);
 }
 
 // Feed current vent + printer state to the RGB lighting policy (which decides
@@ -75,14 +87,23 @@ static void update_rgb_from_state(void)
 {
     dv_printer_status_t status = DV_PS_NONE;
     float bed = NAN;
+    float progress = -1.0f;
     switch (dc_source_get()) {
     case DC_SRC_BAMBU: {
         dc_bambu_status_t st = {0};
         dc_bambu_get_status(&st);
-        status = st.error ? DV_PS_ERROR
-               : st.printing ? DV_PS_PRINTING
-               : st.connected ? DV_PS_IDLE : DV_PS_NONE;   // Bambu exposes a coarse status
+        switch (st.print_state) {                      // full normalized gcode_state
+        case DC_BAMBU_PRINT_DOWNLOADING:
+        case DC_BAMBU_PRINT_PREPARING: status = DV_PS_PREPARING; break;
+        case DC_BAMBU_PRINT_PRINTING:  status = DV_PS_PRINTING; break;
+        case DC_BAMBU_PRINT_PAUSED:    status = DV_PS_PAUSED; break;
+        case DC_BAMBU_PRINT_COMPLETE:  status = DV_PS_COMPLETE; break;
+        case DC_BAMBU_PRINT_ERROR:     status = DV_PS_ERROR; break;
+        case DC_BAMBU_PRINT_IDLE:      status = DV_PS_IDLE; break;
+        default: status = st.connected ? DV_PS_IDLE : DV_PS_NONE; break;
+        }
         bed = st.bed_temp;
+        progress = st.connected ? st.progress : -1.0f;
         break;
     }
     case DC_SRC_KLIPPER: {
@@ -98,12 +119,13 @@ static void update_rgb_from_state(void)
         default:                   status = DV_PS_NONE; break;   // UNKNOWN / not subscribed
         }
         bed = st.bed_temp;
+        if (status == DV_PS_PRINTING || status == DV_PS_PAUSED) progress = st.progress;
         break;
     }
     default:
         break;
     }
-    dv_rgb_update((int)dv_policy_get_target(), status, bed);
+    dv_rgb_update((int)dv_policy_get_target(), status, bed, progress);
 }
 
 // Button semantics from the stock firmware:

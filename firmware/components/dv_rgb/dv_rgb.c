@@ -36,12 +36,18 @@ static dv_lighting_t s_cfg = {
     .error = {255, 0, 0}, .use_error = false,
     .mode = DV_LIGHT_MODE_VENT,
     .idle = {255, 255, 255}, .prep = {248, 163, 35}, .paused = {255, 255, 255}, .complete = {0, 255, 42},
+    .per_state = 0,
+    .fx_state = {0}, .br_state = {0}, .sp_state = {0}, .dir_state = {0},
+    .dir = 0,
+    .warn_on = 0, .warn_c = 60, .warn = {255, 120, 0}, .warn_blink = 1,
+    .stripe_b = {255, 255, 255}, .stripe_w = 3,
 };
 
 static int s_target = DV_MOTOR_TARGET_CLOSED;
 static int s_pstatus = DV_PS_NONE;
 static bool s_printing, s_error;
 static float s_bed = NAN;
+static float s_progress = -1.0f;
 
 static const uint8_t *printer_status_color(void)
 {
@@ -79,7 +85,7 @@ static dc_rgb_t base_color(void)
     return (dc_rgb_t){base[0], base[1], base[2]};
 }
 
-/* Map DragonVent's effect ids (stable 0..7 for the SPA dropdown and saved NVS
+/* Map DragonVent's effect ids (stable 0..11 for the SPA dropdown and saved NVS
  * configs) onto the shared engine's enum, which numbers effects differently. */
 static dc_lighting_effect_t core_effect(uint8_t effect)
 {
@@ -91,8 +97,36 @@ static dc_lighting_effect_t core_effect(uint8_t effect)
     case DV_FX_WAVE: return DC_LIGHTING_WAVE;
     case DV_FX_MARQUEE: return DC_LIGHTING_MARQUEE;
     case DV_FX_CYLON: return DC_LIGHTING_CYLON;
+    case DV_FX_PROGRESS: return DC_LIGHTING_PROGRESS;
+    case DV_FX_PROGRESS_ANIM: return DC_LIGHTING_PROGRESS_ANIM;
+    case DV_FX_STRIPED: return DC_LIGHTING_STRIPED_PROGRESS;
+    case DV_FX_CUSTOM: return DC_LIGHTING_CUSTOM;
     default: return DC_LIGHTING_SOLID;
     }
+}
+
+/* Resolve the effect/brightness/speed/direction to render right now. Outside
+ * per-state mode (or outside PRINTER mode) the globals apply; in per-state mode
+ * each printer state carries its own set, 0 meaning "inherit the global". */
+static void resolve_render(uint8_t *fx, uint8_t *bright, uint8_t *speed, uint8_t *dir)
+{
+    *fx = s_cfg.effect;
+    *bright = s_cfg.brightness;
+    *speed = s_cfg.speed;
+    *dir = s_cfg.dir;
+    if (s_cfg.mode == DV_LIGHT_MODE_PRINTER && s_cfg.per_state) {
+        int st = s_pstatus;
+        if (st < 0 || st > DV_PS_ERROR) st = DV_PS_NONE;
+        *fx = s_cfg.fx_state[st];
+        if (s_cfg.br_state[st]) *bright = s_cfg.br_state[st];
+        if (s_cfg.sp_state[st]) *speed = s_cfg.sp_state[st];
+        *dir = s_cfg.dir_state[st];
+    }
+    /* The progress fills need a job; with no progress they would paint black.
+     * Fall back to a solid state color instead (striped keeps animating as a
+     * full-length barber pole, which the engine handles itself). */
+    if ((*fx == DV_FX_PROGRESS || *fx == DV_FX_PROGRESS_ANIM) && s_progress < 0.0f)
+        *fx = DV_FX_SOLID;
 }
 
 /* Caller holds s_lock. Product policy resolves color + error precedence; the
@@ -100,13 +134,29 @@ static dc_lighting_effect_t core_effect(uint8_t effect)
 static void apply_locked(void)
 {
     if (!s_cfg.enabled) { (void)dc_lighting_off(); return; }
+    (void)dc_lighting_set_progress(s_progress);
+    (void)dc_lighting_set_stripe((dc_rgb_t){s_cfg.stripe_b[0], s_cfg.stripe_b[1], s_cfg.stripe_b[2]},
+                                 s_cfg.stripe_w);
     /* A print error takes top precedence and flashes to demand attention. */
     if (s_cfg.use_error && s_error) {
+        (void)dc_lighting_set_brightness(s_cfg.brightness);
         (void)dc_lighting_set((dc_rgb_t){s_cfg.error[0], s_cfg.error[1], s_cfg.error[2]}, DC_LIGHTING_STROBE, 64);
         return;
     }
+    /* Hot-bed warning sits above every normal layer (but below a print error):
+     * at/over the threshold the strips demand attention in the warning color. */
+    if (s_cfg.warn_on && !isnan(s_bed) && s_bed >= (float)s_cfg.warn_c) {
+        (void)dc_lighting_set_brightness(s_cfg.brightness);
+        (void)dc_lighting_set((dc_rgb_t){s_cfg.warn[0], s_cfg.warn[1], s_cfg.warn[2]},
+                              s_cfg.warn_blink ? DC_LIGHTING_STROBE : DC_LIGHTING_SOLID, 96);
+        return;
+    }
+    uint8_t fx, bright, speed, dir;
+    resolve_render(&fx, &bright, &speed, &dir);
+    (void)dc_lighting_set_brightness(bright);
+    (void)dc_lighting_set_direction(dir != 0);
     /* Cylon uses the resolved state color, like the other effects. */
-    (void)dc_lighting_set(base_color(), core_effect(s_cfg.effect), s_cfg.speed);
+    (void)dc_lighting_set(base_color(), core_effect(fx), speed);
 }
 
 void dv_rgb_get_config(dv_lighting_t *out)
@@ -122,7 +172,11 @@ esp_err_t dv_rgb_set_config(const dv_lighting_t *cfg)
     if (!cfg || !s_lock) return ESP_ERR_INVALID_ARG;
     xSemaphoreTake(s_lock, portMAX_DELAY);
     s_cfg = *cfg;
-    if (s_cfg.effect > DV_FX_CYLON) s_cfg.effect = DV_FX_SOLID;
+    if (s_cfg.effect > DV_FX_CUSTOM) s_cfg.effect = DV_FX_SOLID;
+    for (int i = 0; i < 7; ++i)
+        if (s_cfg.fx_state[i] > DV_FX_CUSTOM) s_cfg.fx_state[i] = DV_FX_SOLID;
+    if (s_cfg.stripe_w < 1) s_cfg.stripe_w = 1;
+    if (s_cfg.stripe_w > 15) s_cfg.stripe_w = 15;
     (void)dc_lighting_set_brightness(s_cfg.brightness);
     for (int i = 0; i < s_count && i < MAX_STRIPS; ++i)
         (void)dc_lighting_set_output_reverse(i, s_cfg.rev_strip[i]);
@@ -190,7 +244,7 @@ esp_err_t dv_rgb_start(void)
     return ESP_OK;
 }
 
-void dv_rgb_update(int target, int status, float bed_temp_c)
+void dv_rgb_update(int target, int status, float bed_temp_c, float progress)
 {
     if (!s_lock) return;
     xSemaphoreTake(s_lock, portMAX_DELAY);
@@ -199,6 +253,17 @@ void dv_rgb_update(int target, int status, float bed_temp_c)
     s_printing = status == DV_PS_PRINTING;
     s_error = status == DV_PS_ERROR;
     s_bed = bed_temp_c;
+    s_progress = progress;
     apply_locked();
     xSemaphoreGive(s_lock);
+}
+
+esp_err_t dv_rgb_set_frames(const uint8_t *rgb, uint16_t frames, uint16_t pixels, uint8_t fps)
+{
+    return dc_lighting_set_frames(rgb, frames, pixels, fps);
+}
+
+void dv_rgb_get_frames_info(uint16_t *frames, uint16_t *pixels, uint8_t *fps)
+{
+    dc_lighting_get_frames_info(frames, pixels, fps);
 }

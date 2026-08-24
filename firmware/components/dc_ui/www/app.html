@@ -329,6 +329,9 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
 .set-info dd{ margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   word-break: break-all; text-align: right; }
 .light-row{ display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
+.ps-head,.ps-row{display:grid;grid-template-columns:1.1fr 1.6fr .8fr .8fr .9fr;gap:6px;align-items:center;margin:4px 0;}
+.ps-row input,.ps-row select{width:100%;min-width:0;}
+.ps-head{font-size:.72rem;opacity:.65;}
 .light-row > label:first-child{ color: var(--muted-foreground); }
 .light-row input[type=color]{ inline-size: 44px; block-size: 26px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: none; cursor: pointer; }
 .light-row input[type=range]{ inline-size: 55%; }
@@ -1049,6 +1052,8 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
       <button class="tab vent-tab" type="button" data-vent-page="auto" aria-selected="false" aria-label="Automatic vent policy"><svg class="icon"><use href="#i-refresh"/></svg></button>
       <button class="tab vent-tab" type="button" data-vent-page="fans" data-capability="printer_fans" aria-selected="false" aria-label="Printer fans"><svg class="icon"><use href="#i-fan"/></svg></button>
       <button class="tab vent-tab" type="button" data-vent-page="lighting" aria-selected="false" aria-label="Lighting"><svg class="icon"><use href="#i-bulb"/></svg></button>
+      <a class="tab vent-tab" href="#setup" data-open-provisioning data-provision-target="dc-wifi-card" aria-label="Network setup"><svg class="icon"><use href="#i-wifi"/></svg></a>
+      <a class="tab vent-tab" href="#setup" data-open-provisioning data-provision-target="dc-product-setup" aria-label="Printer setup"><svg class="icon"><use href="#i-spool"/></svg></a>
       <button class="tab vent-tab" type="button" data-vent-page="settings" aria-selected="false" aria-label="Settings"><svg class="icon"><use href="#i-settings"/></svg></button>
     </nav>
 
@@ -1204,19 +1209,45 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
           <div class="light-row"><label for="dv-light-print">Printing color</label><input type="color" id="dv-light-print"></div>
           <div class="light-row"><label for="dv-light-usetemp">Temperature gradient</label><input type="checkbox" id="dv-light-usetemp"></div>
           <div class="light-row"><label>Gradient range &deg;C</label><span class="light-range"><input type="number" id="dv-light-tmin" min="0" max="120" step="1"> &ndash; <input type="number" id="dv-light-tmax" min="0" max="120" step="1"></span></div>
-          <div class="light-row"><label for="dv-light-effect">Effect</label><select id="dv-light-effect"><option value="0">Solid</option><option value="1">Cycle</option><option value="2">Rainbow</option><option value="3">Breathe</option><option value="4">Strobe</option><option value="5">Wave</option><option value="6">Marquee</option><option value="7">Cylon eye</option></select></div>
+          <div class="light-row"><label for="dv-light-effect">Effect</label><select id="dv-light-effect"><option value="0">Solid</option><option value="1">Cycle</option><option value="2">Rainbow</option><option value="3">Breathe</option><option value="4">Strobe</option><option value="5">Wave</option><option value="6">Marquee</option><option value="7">Cylon eye</option><option value="8">Progress bar</option><option value="9">Animated progress</option><option value="10">Striped progress</option><option value="11">Custom animation</option></select></div>
           <div class="light-row"><label for="dv-light-speed">Effect speed</label><input type="range" id="dv-light-speed" min="0" max="255"></div>
+          <div class="light-row" data-capability="lighting_v2"><label for="dv-light-dir">Animation direction</label><select id="dv-light-dir"><option value="0">Forward</option><option value="1">Reverse</option></select></div>
+          <div class="light-row" data-capability="lighting_v2"><label for="dv-light-stripeb">Stripe second color</label><input type="color" id="dv-light-stripeb"></div>
+          <div class="light-row" data-capability="lighting_v2"><label for="dv-light-stripew">Stripe width (px)</label><span class="light-range"><input type="number" id="dv-light-stripew" min="1" max="15" step="1"></span></div>
           <div class="light-row"><label id="dv-light-rev0-lbl" for="dv-light-rev0">Reverse strip 1</label><input type="checkbox" id="dv-light-rev0"></div>
           <div class="light-row" id="dv-light-rev1-row"><label for="dv-light-rev1">Reverse strip 2</label><input type="checkbox" id="dv-light-rev1"></div>
           <div class="light-row"><label for="dv-light-useerror">Flash on print error</label><input type="checkbox" id="dv-light-useerror"></div>
           <div class="light-row"><label for="dv-light-error">Error color</label><input type="color" id="dv-light-error"></div>
+          <div class="light-row" data-capability="lighting_v2"><label for="dv-light-warnon">Hot-bed warning</label><input type="checkbox" id="dv-light-warnon"></div>
+          <div class="light-row" data-capability="lighting_v2"><label for="dv-light-warnc">Warn at bed &deg;C</label><span class="light-range"><input type="number" id="dv-light-warnc" min="0" max="120" step="1"></span></div>
+          <div class="light-row" data-capability="lighting_v2"><label for="dv-light-warn">Warning color</label><input type="color" id="dv-light-warn"></div>
+          <div class="light-row" data-capability="lighting_v2"><label for="dv-light-warnblink">Warning blinks</label><input type="checkbox" id="dv-light-warnblink"></div>
           <p class="set-note">Printer-status colors (used when <em>Color follows</em> is <em>Printer status</em>). Printing uses the Printing color above; Error uses the Error color above.</p>
           <div class="light-row"><label for="dv-light-idle">Idle</label><input type="color" id="dv-light-idle"></div>
           <div class="light-row"><label for="dv-light-prep">Preparing</label><input type="color" id="dv-light-prep"></div>
           <div class="light-row"><label for="dv-light-paused">Paused</label><input type="color" id="dv-light-paused"></div>
           <div class="light-row"><label for="dv-light-complete">Completed</label><input type="color" id="dv-light-complete"></div>
+          <div data-capability="lighting_v2">
+            <div class="light-row"><label for="dv-light-perstate">Per-state effects</label><input type="checkbox" id="dv-light-perstate"></div>
+            <p class="set-note">Each printer state picks its own effect, brightness, speed and direction. Brightness or speed of 0 inherits the global value. The progress effects follow print progress and fall back to a solid color when no job is active.</p>
+            <div class="ps-head"><span>State</span><span>Effect</span><span>Bright</span><span>Speed</span><span>Dir</span></div>
+            <div id="dv-perstate-grid"></div>
+          </div>
           <button class="btn btn-primary btn-block" type="button" id="dv-light-save"><svg class="icon"><use href="#i-bulb"/></svg> Save lighting</button>
           <div class="mode-feedback" id="dv-light-msg" role="status" aria-live="polite"></div>
+        </article>
+        <article class="set-card" data-capability="led_anim">
+          <h3>LED animation</h3>
+          <p class="set-note">Upload an image and it plays on the strips: each pixel ROW is one frame (width is squeezed to the strip). Stored in RAM only, so it plays instantly and is gone after a reboot. Re-upload to bring it back. Select the <em>Custom animation</em> effect to show it.</p>
+          <div class="light-row"><label for="dv-anim-file">Image</label><input type="file" id="dv-anim-file" accept="image/*"></div>
+          <div class="light-row"><label for="dv-anim-fps">Frames per second</label><span class="light-range"><input type="number" id="dv-anim-fps" min="1" max="60" step="1" value="12"></span></div>
+          <div class="light-row"><label>Loaded</label><span id="dv-anim-state">none</span></div>
+          <div class="provision-actions">
+            <button class="btn btn-primary" type="button" id="dv-anim-load">Upload &amp; play</button>
+            <button class="btn" type="button" id="dv-anim-test">Test rainbow</button>
+            <button class="btn btn-danger" type="button" id="dv-anim-clear">Clear</button>
+          </div>
+          <div class="mode-feedback" id="dv-anim-msg" role="status" aria-live="polite"></div>
         </article>
       </section>
 
@@ -1237,6 +1268,26 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
           </dl>
           <button class="btn btn-primary btn-block" type="button" id="dv-recalibrate"><svg class="icon"><use href="#i-refresh"/></svg> Recalibrate vent</button>
           <div class="mode-feedback" id="dv-cal-msg" role="status" aria-live="polite"></div>
+        </article>
+        <article class="set-card" data-capability="ring_config">
+          <h3>Button ring</h3>
+          <p class="set-note">What the power-button ring does in each mode. Stock behavior is off in Auto and blinking in Manual.</p>
+          <div class="light-row"><label for="dv-ring-auto">In Auto mode</label><select id="dv-ring-auto"><option value="0">Off</option><option value="1">Solid</option><option value="2">Blink</option></select></div>
+          <div class="light-row"><label for="dv-ring-manual">In Manual mode</label><select id="dv-ring-manual"><option value="0">Off</option><option value="1">Solid</option><option value="2">Blink</option></select></div>
+          <button class="btn btn-primary btn-block" type="button" id="dv-ring-save">Save ring behavior</button>
+          <div class="mode-feedback" id="dv-ring-msg" role="status" aria-live="polite"></div>
+        </article>
+        <article class="set-card" data-capability="unbind">
+          <h3>Printer binding</h3>
+          <p class="set-note" id="dv-bind-info">--</p>
+          <button class="btn btn-danger btn-block" type="button" id="dv-unbind">Unbind printer</button>
+          <div class="mode-feedback" id="dv-bind-msg" role="status" aria-live="polite"></div>
+        </article>
+        <article class="set-card" data-capability="restart">
+          <h3>Restart</h3>
+          <p class="set-note">Reboots the vent. Wi-Fi, printer binding and settings are kept. Needed after a hostname change.</p>
+          <button class="btn btn-primary btn-block" type="button" id="dv-restart">Restart device</button>
+          <div class="mode-feedback" id="dv-restart-msg" role="status" aria-live="polite"></div>
         </article>
         <article class="set-card">
           <h3>Network &amp; printer source</h3>
@@ -1322,7 +1373,7 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
   <div class="provision-shell">
     <div class="provision-head"><div><strong id="dc-setup-title">Device setup</strong><div class="set-note" id="dc-setup-mode"></div></div>
       <button class="btn" type="button" id="dc-setup-close">Close</button></div>
-    <article class="provision-card"><h3>Wi-Fi</h3>
+    <article class="provision-card" id="dc-wifi-card"><h3>Wi-Fi</h3>
       <div class="provision-grid">
         <div class="provision-field"><label for="dc-wifi-network">Network</label><select id="dc-wifi-network"><option value="">Scanning…</option></select></div>
         <div class="provision-field"><label for="dc-wifi-manual">Hidden SSID</label><input id="dc-wifi-manual" autocomplete="off"></div>
@@ -1538,7 +1589,7 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
     return dcFetchJson('/api/v1/provisioning',{cache:'no-store'}).then(applyProvisioning);
   }
   function openProvisioning(target){ $('dc-provisioning').hidden=false; location.hash='setup'; loadProvisioning().then(function(){ if(target){var el=$(target); if(el)el.scrollIntoView({behavior:'smooth',block:'start'}); } }).catch(function(){setupMessage('dc-system-msg','Provisioning service is unavailable in this firmware.',true);}); }
-  document.querySelectorAll('[data-open-provisioning]').forEach(function(a){a.addEventListener('click',function(e){e.preventDefault();openProvisioning();});});
+  document.querySelectorAll('[data-open-provisioning]').forEach(function(a){a.addEventListener('click',function(e){e.preventDefault();openProvisioning(a.dataset.provisionTarget);});});
   $('dc-setup-close').addEventListener('click',function(){$('dc-provisioning').hidden=true;if(location.hash==='#setup')history.replaceState(null,'',location.pathname);});
   $('dc-wifi-scan').addEventListener('click',function(){setupMessage('dc-wifi-msg','Scanning…');dcRequest('/api/v1/provisioning/scan',{}).then(function(){setTimeout(loadProvisioning,1800);}).catch(function(j){setupMessage('dc-wifi-msg',j.error||'Scan failed.',true);});});
   $('dc-wifi-save').addEventListener('click',function(){var ssid=$('dc-wifi-network').value||$('dc-wifi-manual').value.trim();setupMessage('dc-wifi-msg','Saving…');dcRequest('/api/v1/provisioning/wifi',{ssid:ssid,password:$('dc-wifi-password').value}).then(function(){setupMessage('dc-wifi-msg','Saved. Rebooting…');}).catch(function(j){setupMessage('dc-wifi-msg',j.error||'Could not save Wi-Fi.',true);});});
@@ -1939,8 +1990,9 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
     document.querySelectorAll('.vent-tab').forEach(function(t){
       t.setAttribute('aria-selected', String(t===tab));
     });
-    if(page==='lighting') loadLighting();
+    if(page==='lighting'){ loadLighting(); loadAnimInfo(); }
     if(page==='auto') loadFilament();
+    if(page==='settings') loadVentSettings();
   }
 
   function rgbToHex(a){ function h(n){ return ('0'+((n||0)&255).toString(16)).slice(-2); }
@@ -1972,8 +2024,74 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
       var two=(c.strips|0)>=2;
       $('dv-light-rev1-row').hidden=!two;
       $('dv-light-rev0-lbl').textContent=two?'Reverse strip 1':'Reverse LED direction';
+      if($('dv-light-dir')){
+        $('dv-light-dir').value=String(c.dir||0);
+        $('dv-light-stripeb').value=rgbToHex(c.stripe_b||[255,255,255]);
+        $('dv-light-stripew').value=c.stripe_w||3;
+        $('dv-light-warnon').checked=!!c.warn_on;
+        $('dv-light-warnc').value=c.warn_c!=null?c.warn_c:60;
+        $('dv-light-warn').value=rgbToHex(c.warn||[255,120,0]);
+        $('dv-light-warnblink').checked=c.warn_blink!=null?!!c.warn_blink:true;
+        $('dv-light-perstate').checked=!!c.per_state;
+        buildPerState(c);
+      }
     }).catch(function(){});
   }
+  /* ---- Per-state effect grid (lighting_v2) ------------------------------- */
+  var PS_STATES=[[1,'Idle'],[2,'Preparing'],[3,'Printing'],[4,'Paused'],[5,'Completed'],[6,'Error']];
+  var PS_FX=['Solid','Cycle','Rainbow','Breathe','Strobe','Wave','Marquee','Cylon eye','Progress bar','Animated progress','Striped progress','Custom animation'];
+  var psCache={fx:[0,0,0,0,0,0,0],br:[0,0,0,0,0,0,0],sp:[0,0,0,0,0,0,0],dir:[0,0,0,0,0,0,0]};
+  function psArr(a,old){ a=Array.isArray(a)?a.slice(0,7):old; while(a.length<7)a.push(0); return a.map(function(v){return v|0;}); }
+  function buildPerState(c){
+    psCache.fx=psArr(c.fx_state,psCache.fx);
+    psCache.br=psArr(c.br_state,psCache.br);
+    psCache.sp=psArr(c.sp_state,psCache.sp);
+    psCache.dir=psArr(c.dir_state,psCache.dir);
+    var g=$('dv-perstate-grid'); if(!g) return;
+    g.innerHTML='';
+    var opts=PS_FX.map(function(n,ix){return '<option value="'+ix+'">'+n+'</option>';}).join('');
+    PS_STATES.forEach(function(st){
+      var i=st[0];
+      var row=document.createElement('div'); row.className='ps-row'; row.dataset.psIndex=i;
+      row.innerHTML='<span class="ps-name">'+st[1]+'</span>'
+        +'<select class="ps-fx">'+opts+'</select>'
+        +'<input class="ps-br" type="number" min="0" max="255" step="1">'
+        +'<input class="ps-sp" type="number" min="0" max="255" step="1">'
+        +'<select class="ps-dir"><option value="0">Fwd</option><option value="1">Rev</option></select>';
+      row.querySelector('.ps-fx').value=String(psCache.fx[i]||0);
+      row.querySelector('.ps-br').value=psCache.br[i]||0;
+      row.querySelector('.ps-sp').value=psCache.sp[i]||0;
+      row.querySelector('.ps-dir').value=String(psCache.dir[i]||0);
+      g.appendChild(row);
+    });
+  }
+  function collectPerState(){
+    var g=$('dv-perstate-grid');
+    if(g) g.querySelectorAll('.ps-row').forEach(function(row){
+      var i=parseInt(row.dataset.psIndex,10);
+      function clamp(v){ v=parseInt(v,10)||0; return v<0?0:v>255?255:v; }
+      psCache.fx[i]=parseInt(row.querySelector('.ps-fx').value,10)||0;
+      psCache.br[i]=clamp(row.querySelector('.ps-br').value);
+      psCache.sp[i]=clamp(row.querySelector('.ps-sp').value);
+      psCache.dir[i]=parseInt(row.querySelector('.ps-dir').value,10)?1:0;
+    });
+    return psCache;
+  }
+  /* ---- RAM animation ------------------------------------------------------ */
+  function loadAnimInfo(){
+    if(!$('dv-anim-state')) return;
+    fetch('/api/v2/anim',{cache:'no-store'}).then(function(r){return r.json();}).then(function(a){
+      u('dv-anim-state', a.loaded ? (a.frames+' frames \u00d7 '+a.pixels+' px @ '+a.fps+' fps') : 'none (RAM only, cleared by reboot)');
+    }).catch(function(){});
+  }
+  function animPost(bytes){
+    return fetch('/api/v2/anim',{method:'POST',headers:dcAuthHeaders({'Content-Type':'application/octet-stream'}),body:bytes})
+      .then(function(r){ if(!r.ok) throw 0; });
+  }
+  function animHeader(out,fps,pixels,frames){ out[0]=68;out[1]=86;out[2]=fps;out[3]=pixels;out[4]=frames&255;out[5]=frames>>8; }
+  function hueRgb(h){ h=((h%360)+360)%360; var x=1-Math.abs((h/60)%2-1);
+    var t=[[1,x,0],[x,1,0],[0,1,x],[0,x,1],[x,0,1],[1,0,x]][Math.floor(h/60)%6];
+    return [Math.round(t[0]*255),Math.round(t[1]*255),Math.round(t[2]*255)]; }
   function filRow(name, seal){
     var d=document.createElement('div'); d.className='fil-row';
     d.innerHTML='<input type="text" class="fil-name" maxlength="11" placeholder="e.g. ABS">'
@@ -2010,7 +2128,7 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
       : 'Manual control is active. Select Auto to resume printer-following.');
     u('dv-mode-chip', (s.mode||'manual').toUpperCase()+' mode');
     u('dv-source', p.source||'standalone');
-    u('dv-link', p.connected?'connected':'not connected');
+    u('dv-link', p.connected?'connected':(p.last_failure?('not connected: '+p.last_failure):'not connected'));
     u('dv-printer', p.state||'unknown');
     u('dv-bed', p.bed_temperature_c==null?'--':Number(p.bed_temperature_c).toFixed(1)+' °C');
     u('dv-material', p.material||'--');
@@ -2039,11 +2157,13 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
     /* Job card. Hidden entirely when nothing is printing — an empty progress
        bar reading 0% looks like a stalled print rather than an idle machine. */
     var card = $('dv-job-card');
-    var active = p.state==='printing' && (p.layer!=null || p.job_name);
+    var jobState = p.state==='printing'||p.state==='paused'||p.state==='preparing';
+    var active = jobState && (p.progress!=null || p.layer!=null || p.job_name);
     if(card) card.hidden = !active;
     if(active){
-      u('dv-job-name', p.job_name || 'Printing');
-      var pct = (p.layer!=null && p.total_layers) ? Math.round(p.layer*100/p.total_layers) : null;
+      u('dv-job-name', (p.state==='paused'?'Paused \u00b7 ':'')+(p.job_name || 'Printing'));
+      var pct = p.progress!=null ? Math.round(p.progress)
+              : ((p.layer!=null && p.total_layers) ? Math.round(p.layer*100/p.total_layers) : null);
       u('dv-job-pct', pct==null ? '' : pct+'%');
       var bar = $('dv-job-bar');
       if(bar) bar.style.width = (pct==null?0:pct)+'%';
@@ -2879,10 +2999,98 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
       complete: hexToRgb($('dv-light-complete').value),
       rev_strip: [$('dv-light-rev0').checked, $('dv-light-rev1').checked]
     };
+    if($('dv-light-dir')){
+      var ps=collectPerState();
+      body.dir=parseInt($('dv-light-dir').value,10)?1:0;
+      body.stripe_b=hexToRgb($('dv-light-stripeb').value);
+      body.stripe_w=Math.max(1,Math.min(15,parseInt($('dv-light-stripew').value,10)||3));
+      body.warn_on=$('dv-light-warnon').checked;
+      body.warn_c=Math.max(0,Math.min(120,parseInt($('dv-light-warnc').value,10)||60));
+      body.warn=hexToRgb($('dv-light-warn').value);
+      body.warn_blink=$('dv-light-warnblink').checked;
+      body.per_state=$('dv-light-perstate').checked;
+      body.fx_state=ps.fx; body.br_state=ps.br; body.sp_state=ps.sp; body.dir_state=ps.dir;
+    }
     ventFlash('dv-light-msg','Saving…');
     ventPost('/api/v2/lighting',body)
       .then(function(){ ventFlash('dv-light-msg','Lighting saved.','is-ok'); })
       .catch(function(j){ ventFlash('dv-light-msg',(j&&j.message)||'Save failed.','is-error'); });
+  });
+  function loadVentSettings(){
+    fetch('/api/v2/settings',{cache:'no-store'}).then(function(r){return r.json();}).then(function(cfg){
+      if($('dv-ring-auto') && cfg.ring_auto!=null) $('dv-ring-auto').value=String(cfg.ring_auto);
+      if($('dv-ring-manual') && cfg.ring_manual!=null) $('dv-ring-manual').value=String(cfg.ring_manual);
+    }).catch(function(){});
+    fetch('/api/v2/state',{cache:'no-store'}).then(function(r){return r.json();}).then(function(st){
+      var p=(st&&st.printer)||{};
+      var line = p.source==='bambu'
+        ? ('Bambu LAN. '+(p.connected?'Connected.':'Not connected.')+(p.last_failure?(' Reason: '+p.last_failure):''))
+        : ('Control source: '+(p.source||'standalone')+'.');
+      u('dv-bind-info', line);
+    }).catch(function(){});
+  }
+  if($('dv-ring-save')) $('dv-ring-save').addEventListener('click',function(){
+    ventFlash('dv-ring-msg','Saving\u2026');
+    ventPost('/api/v2/settings',{ring_auto:parseInt($('dv-ring-auto').value,10)||0,ring_manual:parseInt($('dv-ring-manual').value,10)||0})
+      .then(function(){ ventFlash('dv-ring-msg','Ring behavior saved.','is-ok'); })
+      .catch(function(j){ ventFlash('dv-ring-msg',(j&&j.message)||'Save failed.','is-error'); });
+  });
+  function armTwice(btn, idle, ask, fn){
+    var armed=false;
+    btn.addEventListener('click',function(){
+      if(!armed){ armed=true; btn.textContent=ask; setTimeout(function(){ armed=false; btn.textContent=idle; },4000); return; }
+      armed=false; btn.textContent=idle; fn();
+    });
+  }
+  if($('dv-unbind')) armTwice($('dv-unbind'),'Unbind printer','Really unbind?',function(){
+    ventFlash('dv-bind-msg','Unbinding\u2026');
+    ventPost('/api/v2/bambu/unbind',{})
+      .then(function(){ ventFlash('dv-bind-msg','Printer unbound. Bind again from Printer setup in the drawer.','is-ok'); loadVentSettings(); })
+      .catch(function(j){ ventFlash('dv-bind-msg',(j&&j.message)||'Unbind failed.','is-error'); });
+  });
+  if($('dv-restart')) armTwice($('dv-restart'),'Restart device','Really restart?',function(){
+    ventFlash('dv-restart-msg','Restarting\u2026 the page reloads when the vent is back.');
+    fetch('/api/v2/system/restart',{method:'POST',headers:hdr(),body:'{}'}).catch(function(){});
+    setTimeout(function(){ location.reload(); },9000);
+  });
+  if($('dv-anim-load')) $('dv-anim-load').addEventListener('click',function(){
+    var f=$('dv-anim-file').files[0];
+    if(!f){ ventFlash('dv-anim-msg','Choose an image first. Each pixel row becomes one frame.','is-error'); return; }
+    var fps=Math.max(1,Math.min(60,parseInt($('dv-anim-fps').value,10)||12));
+    var img=new Image();
+    img.onload=function(){
+      var pixels=Math.min(255,img.naturalWidth||30), frames=Math.min(1400,img.naturalHeight||1);
+      var cv=document.createElement('canvas'); cv.width=pixels; cv.height=frames;
+      var cx=cv.getContext('2d'); cx.drawImage(img,0,0,pixels,frames);
+      var d=cx.getImageData(0,0,pixels,frames).data;
+      var out=new Uint8Array(6+frames*pixels*3);
+      animHeader(out,fps,pixels,frames);
+      var o=6;
+      for(var y=0;y<frames;y++) for(var x=0;x<pixels;x++){ var i4=(y*pixels+x)*4; out[o++]=d[i4]; out[o++]=d[i4+1]; out[o++]=d[i4+2]; }
+      URL.revokeObjectURL(img.src);
+      ventFlash('dv-anim-msg','Uploading\u2026');
+      animPost(out)
+        .then(function(){ ventFlash('dv-anim-msg','Loaded. Select the Custom animation effect to play it.','is-ok'); loadAnimInfo(); })
+        .catch(function(){ ventFlash('dv-anim-msg','Upload failed.','is-error'); });
+    };
+    img.onerror=function(){ ventFlash('dv-anim-msg','Could not read that image.','is-error'); };
+    img.src=URL.createObjectURL(f);
+  });
+  if($('dv-anim-test')) $('dv-anim-test').addEventListener('click',function(){
+    var pixels=30, frames=90, fps=Math.max(1,Math.min(60,parseInt($('dv-anim-fps').value,10)||24));
+    var out=new Uint8Array(6+frames*pixels*3);
+    animHeader(out,fps,pixels,frames);
+    var o=6;
+    for(var fr=0;fr<frames;fr++) for(var x=0;x<pixels;x++){ var c2=hueRgb(x*360/pixels+fr*4); out[o++]=c2[0]; out[o++]=c2[1]; out[o++]=c2[2]; }
+    ventFlash('dv-anim-msg','Uploading test\u2026');
+    animPost(out)
+      .then(function(){ ventFlash('dv-anim-msg','Rainbow loaded. Select the Custom animation effect to play it.','is-ok'); loadAnimInfo(); })
+      .catch(function(){ ventFlash('dv-anim-msg','Upload failed.','is-error'); });
+  });
+  if($('dv-anim-clear')) $('dv-anim-clear').addEventListener('click',function(){
+    fetch('/api/v2/anim',{method:'DELETE',headers:dcAuthHeaders({})})
+      .then(function(){ ventFlash('dv-anim-msg','Cleared.','is-ok'); loadAnimInfo(); })
+      .catch(function(){ ventFlash('dv-anim-msg','Clear failed.','is-error'); });
   });
   $('dv-fil-add').addEventListener('click',function(){ $('dv-fil-list').appendChild(filRow('', true)); });
   $('dv-fil-save').addEventListener('click',function(){

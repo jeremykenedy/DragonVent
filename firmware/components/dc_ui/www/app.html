@@ -537,6 +537,67 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
   font-weight:600; text-transform:uppercase; }
 .vent-threshold .touch-value{ margin:10px 0 5px; font-size:27px; }
 .vent-settings{ flex-direction:column; gap:12px; max-width:560px; width:100%; }
+
+/* ---- v0.6.2 layout symmetry: hero over Lighting-now on the left, the tall
+   printer panel spanning both rows on the right; job + actions span below. ---- */
+.vent-home .vent-grid{ flex:1 1 auto; }
+.vent-grid{ grid-template-rows:auto minmax(0,1fr) auto auto; }
+.vent-hero{ grid-column:1; grid-row:1; }
+.vent-grid > .vent-status:not(#dv-lightnow){ grid-column:2; grid-row:1 / span 2; }
+#dv-lightnow{ grid-column:1; grid-row:2; }
+
+/* ---- v0.6.2 visual refresh: depth, glass, glow. Scoped to the vent app. ---- */
+.vent-topbar{ display:flex; align-items:center; justify-content:space-between; gap:10px;
+  margin-bottom:10px; padding:8px 12px; border-radius:12px; flex:none;
+  border:1px solid var(--border);
+  background:linear-gradient(180deg, color-mix(in srgb,var(--foreground) 6%,transparent), color-mix(in srgb,var(--foreground) 2%,transparent));
+  backdrop-filter:blur(8px); }
+.vt-brand{ display:flex; align-items:center; gap:8px; font-size:14px; letter-spacing:.02em; }
+.vt-brand .icon{ width:17px; height:17px; color:var(--primary);
+  filter:drop-shadow(0 0 6px color-mix(in srgb,var(--primary) 60%,transparent)); }
+.vt-chip{ display:inline-flex; align-items:center; gap:7px; padding:5px 11px;
+  border-radius:var(--radius-full); font-size:12px; font-weight:600;
+  border:1px solid color-mix(in srgb,var(--primary) 25%,var(--border));
+  background:color-mix(in srgb,var(--primary) 10%,transparent); color:var(--foreground); }
+.vt-dot{ width:8px; height:8px; border-radius:50%; background:var(--muted-foreground); flex:none; color:var(--muted-foreground); }
+.vt-chip[data-state="printing"] .vt-dot{ background:var(--viz-series-2); color:var(--viz-series-2); animation:vt-pulse 1.6s ease-out infinite; }
+.vt-chip[data-state="paused"] .vt-dot{ background:var(--viz-series-3); }
+.vt-chip[data-state="error"] .vt-dot{ background:var(--destructive); color:var(--destructive); animation:vt-pulse 1.1s ease-out infinite; }
+.vt-chip[data-state="offline"]{ opacity:.7; }
+.vt-chip b{ font-variant-numeric:tabular-nums; color:var(--primary); font-size:12px; }
+@keyframes vt-pulse{ 0%{ box-shadow:0 0 0 0 color-mix(in srgb,currentColor 45%,transparent); }
+  70%{ box-shadow:0 0 0 7px transparent; } 100%{ box-shadow:0 0 0 0 transparent; } }
+
+.vent-app .vent-main{ background:
+  radial-gradient(900px 420px at 88% -12%, color-mix(in srgb,var(--primary) 9%,transparent), transparent 62%),
+  radial-gradient(700px 420px at -10% 110%, color-mix(in srgb,var(--viz-series-2) 6%,transparent), transparent 60%); }
+.vent-app .card{ border-radius:14px;
+  background:linear-gradient(180deg, color-mix(in srgb,var(--foreground) 6%,transparent), color-mix(in srgb,var(--foreground) 2.5%,transparent));
+  box-shadow:0 10px 26px -20px rgb(0 0 0 / 55%);
+  transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+.vent-app .vent-grid .card:hover{ transform:translateY(-1px);
+  border-color:color-mix(in srgb,var(--primary) 26%,var(--border));
+  box-shadow:0 14px 30px -18px color-mix(in srgb,var(--primary) 22%,rgb(0 0 0 / 45%)); }
+.vent-app .set-card{ border-radius:12px; }
+.vent-app .card h3{ font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--muted-foreground); margin:0 0 2px; }
+.vent-visual{ box-shadow:0 0 44px -10px color-mix(in srgb,var(--primary) 50%,transparent),
+  inset 0 0 22px color-mix(in srgb,var(--primary) 14%,transparent); }
+.vent-copy h2{ font-weight:700; letter-spacing:.01em;
+  background:linear-gradient(120deg, var(--foreground), color-mix(in srgb,var(--primary) 62%,var(--foreground)));
+  -webkit-background-clip:text; background-clip:text; color:transparent; }
+.vent-bar{ height:8px; border-radius:5px; }
+.vent-bar i{ background:linear-gradient(90deg, var(--primary), var(--viz-series-2)); position:relative; }
+.vent-bar i::after{ content:""; position:absolute; inset:0;
+  background:linear-gradient(110deg, transparent 0 40%, rgb(255 255 255 / 22%) 50%, transparent 60% 100%);
+  background-size:220% 100%; animation:vt-sheen 2.4s linear infinite; }
+@keyframes vt-sheen{ from{ background-position:180% 0; } to{ background-position:-80% 0; } }
+@media (prefers-reduced-motion: reduce){ .vent-bar i::after, .vt-dot{ animation:none !important; } }
+.vent-app .btn-primary{ box-shadow:0 8px 18px -12px color-mix(in srgb,var(--primary) 70%,transparent); }
+.vent-app .tab[aria-selected="true"]{ box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary) 30%,transparent),
+  0 0 14px -6px color-mix(in srgb,var(--primary) 60%,transparent); }
+.ln-swatch{ width:16px; height:16px; border-radius:5px;
+  box-shadow:0 0 10px -1px color-mix(in srgb,var(--primary) 35%,transparent); }
 /* ---- DragonStatus product surface. Orange identifies the ambient/status
    device without borrowing DragonBreath's blue or DragonVent's teal. The
    product adapter only reports printer/Wi-Fi/lighting state; all rendering
@@ -577,8 +638,11 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
   background:var(--background); }
 /* Setup opened from a running product keeps the drawer beside it; full-screen
    is reserved for recovery/AP mode where no product surface exists yet. */
-.provision-overlay.with-rail{ left:49px; }
+.provision-overlay.with-rail{ left:49px; padding:12px; }
 @media(max-width:600px){ .provision-overlay.with-rail{ left:41px; } }
+/* Opened beside the rail, setup aligns LEFT like every other page; the
+   centered column is only for full-screen recovery/AP mode. */
+.provision-overlay.with-rail .provision-shell{ margin:0; }
 .ln-swatch{ display:inline-block; width:14px; height:14px; border-radius:3px;
   border:1px solid var(--border); margin-right:6px; vertical-align:-2px; }
 .provision-shell{ width:min(680px,100%); margin:0 auto; display:flex; flex-direction:column; gap:10px; }
@@ -602,6 +666,7 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
 @media(max-width:560px){ .provision-grid{ grid-template-columns:1fr; } }
 @container (max-width:620px){
   .vent-grid{ grid-template-columns:1fr; grid-template-rows:auto auto auto; }
+  .vent-hero, #dv-lightnow, .vent-grid > .vent-status:not(#dv-lightnow){ grid-column:auto; grid-row:auto; }
   .vent-actions{ grid-column:1; }
   .vent-hero{ min-height:142px; }
 }
@@ -1064,6 +1129,10 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
     </nav>
 
     <main class="vent-main" id="dv-main" data-vent-page="home">
+      <header class="vent-topbar">
+        <div class="vt-brand"><svg class="icon"><use href="#i-wind"/></svg><strong>PandaVent</strong></div>
+        <span class="vt-chip" id="dv-top-printer" data-state="offline"><i class="vt-dot"></i><span id="dv-top-state">--</span><b id="dv-top-pct" hidden></b></span>
+      </header>
       <section class="vent-view vent-home" data-vent-content="home">
         <div class="vent-grid">
           <article class="card vent-hero">
@@ -1495,7 +1564,7 @@ window.DV_ZH={
 "AUTO mode":"自动模式","MANUAL mode":"手动模式",
 "Following printer activity and bed temperature automatically.":"正在根据打印机状态和热床温度自动控制。",
 "Manual control is active. Select Auto to resume printer-following.":"手动控制中。选择“自动”后恢复跟随打印机。",
-"connected":"已连接","not connected":"未连接","standalone":"独立模式","unknown":"未知","idle":"空闲","preparing":"准备中","printing":"打印中","paused":"已暂停","complete":"已完成","error":"错误","downloading":"下载中","none":"无",
+"connected":"已连接","not connected":"未连接","offline":"离线","standalone":"独立模式","unknown":"未知","idle":"空闲","preparing":"准备中","printing":"打印中","paused":"已暂停","complete":"已完成","error":"错误","downloading":"下载中","none":"无",
 "Calibrating…":"校准中…","Calibration complete — endstops learned.":"校准完成，限位已学习。","Recalibrating — the vent will sweep open, then closed…":"重新校准中，风阀将先全开再全关…","Calibration failed.":"校准失败。",
 "Saving…":"保存中…","Lighting saved.":"灯效已保存。","Save failed.":"保存失败。","Saving policy…":"策略保存中…","Automatic printer-following enabled.":"已启用自动跟随打印机。","Could not save policy.":"无法保存策略。","Open temperature must be higher than close temperature.":"打开温度必须高于关闭温度。","Filament rules saved.":"耗材规则已保存。",
 "Ring behavior saved.":"指示环行为已保存。","Unbinding…":"解绑中…","Printer unbound. Bind again from Printer setup in the drawer.":"打印机已解绑。可在侧栏的打印机设置中重新绑定。","Unbind failed.":"解绑失败。",
@@ -2228,6 +2297,18 @@ window.DV_ZH={
       ? 'Following printer activity and bed temperature automatically.'
       : 'Manual control is active. Select Auto to resume printer-following.');
     u('dv-mode-chip', (s.mode||'manual').toUpperCase()+' mode');
+    var tchip=$('dv-top-printer');
+    if(tchip){
+      var tstate = p.source==='none' ? 'standalone' : (p.connected ? (p.state||'unknown') : 'offline');
+      tchip.dataset.state = !p.connected ? 'offline'
+        : p.state==='printing' ? 'printing'
+        : p.state==='paused' ? 'paused'
+        : p.state==='error' ? 'error' : 'idle';
+      u('dv-top-state', tstate);
+      var tpct=$('dv-top-pct');
+      var tshow = p.progress!=null && (p.state==='printing'||p.state==='paused'||p.state==='preparing');
+      if(tpct){ tpct.hidden=!tshow; tpct.textContent = tshow ? Math.round(p.progress)+'%' : ''; }
+    }
     u('dv-source', p.source||'standalone');
     u('dv-link', p.connected?'connected':(p.last_failure?('not connected: '+p.last_failure):'not connected'));
     u('dv-printer', p.state||'unknown');

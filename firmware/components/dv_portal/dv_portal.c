@@ -16,8 +16,10 @@
 #include "dv_motor.h"
 #include "dv_rgb.h"
 #include "dv_policy.h"
+#include "dv_status_led.h"
 #include "esp_app_desc.h"
 #include "esp_http_server.h"
+#include "esp_system.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_wifi.h"
@@ -200,6 +202,8 @@ static cJSON *make_state(void)
     const char *printer_state = source == DC_SRC_NONE ? "standalone" : "unknown";
     float bed = NAN;
     const char *material = "";
+    float bb_progress = -1.0f;
+    char bb_failure[64] = "";
     if (source == DC_SRC_KLIPPER) {
         dc_moonraker_status_t status = {0};
         dc_moonraker_get_status(&status);
@@ -211,15 +215,34 @@ static cJSON *make_state(void)
         dc_bambu_status_t status = {0};
         dc_bambu_get_status(&status);
         connected = status.connected;
-        printer_state = status.printing ? "printing" : "idle";
+        switch (status.print_state) {           // full normalized gcode_state
+        case DC_BAMBU_PRINT_IDLE:        printer_state = "idle"; break;
+        case DC_BAMBU_PRINT_DOWNLOADING: printer_state = "downloading"; break;
+        case DC_BAMBU_PRINT_PREPARING:   printer_state = "preparing"; break;
+        case DC_BAMBU_PRINT_PRINTING:    printer_state = "printing"; break;
+        case DC_BAMBU_PRINT_PAUSED:      printer_state = "paused"; break;
+        case DC_BAMBU_PRINT_COMPLETE:    printer_state = "complete"; break;
+        case DC_BAMBU_PRINT_ERROR:       printer_state = "error"; break;
+        default:                         printer_state = connected ? "idle" : "unknown"; break;
+        }
         bed = status.bed_temp;
         material = status.filament;
+        bb_progress = status.progress;
+        snprintf(bb_failure, sizeof bb_failure, "%s", status.last_failure);
     }
     cJSON_AddBoolToObject(printer, "connected", connected);
     cJSON_AddStringToObject(printer, "state", printer_state);
     if (isnan(bed)) cJSON_AddNullToObject(printer, "bed_temperature_c");
     else cJSON_AddNumberToObject(printer, "bed_temperature_c", bed);
     cJSON_AddStringToObject(printer, "material", material);
+    if (source == DC_SRC_BAMBU) {
+        // Progress as a percentage (null until the printer has reported one),
+        // and why the last connect attempt failed ("" while healthy) — the
+        // binding-error surface WiFi has always had and Bambu never did.
+        if (bb_progress >= 0.0f) cJSON_AddNumberToObject(printer, "progress", (double)(int)(bb_progress * 1000.0f + 0.5f) / 10.0);
+        else                     cJSON_AddNullToObject(printer, "progress");
+        cJSON_AddStringToObject(printer, "last_failure", bb_failure);
+    }
 
     // Display-only detail from the Bambu report. Absent fields are emitted as
     // null rather than 0 or -1 so the UI can render an em dash instead of a
@@ -302,7 +325,9 @@ static esp_err_t info_get(httpd_req_t *req)
     add_device_id(root);
     cJSON *caps = cJSON_AddArrayToObject(root, "capabilities");
     const char *values[] = { "vent_manual", "vent_auto", "vent_calibrate", "source_status",
-                            "polling", "provisioning", "printer_fans" };
+                            "polling", "provisioning", "printer_fans",
+                            "lighting_v2", "led_anim", "restart", "unbind",
+                            "ring_config", "hostname" };
     for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); ++i)
         cJSON_AddItemToArray(caps, cJSON_CreateString(values[i]));
     cJSON *ui = cJSON_AddObjectToObject(root, "ui");
@@ -383,6 +408,10 @@ static esp_err_t settings_get(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "api_version", 2);
     cJSON_AddNumberToObject(root, "bed_open_c", open_c);
     cJSON_AddNumberToObject(root, "bed_close_c", close_c);
+    uint8_t ring_auto, ring_manual;
+    dv_status_led_get_policy(&ring_auto, &ring_manual);
+    cJSON_AddNumberToObject(root, "ring_auto", ring_auto);      // 0 off, 1 solid, 2 blink
+    cJSON_AddNumberToObject(root, "ring_manual", ring_manual);
     return send_json(req, root);
 }
 
@@ -390,8 +419,20 @@ static esp_err_t settings_post(httpd_req_t *req)
 {
     if (auth_reject(req)) return ESP_OK;
     cJSON *body = recv_json(req);
+    // Button-ring behavior may ride alone or alongside the thresholds.
+    cJSON *ra = body ? cJSON_GetObjectItemCaseSensitive(body, "ring_auto") : NULL;
+    cJSON *rm = body ? cJSON_GetObjectItemCaseSensitive(body, "ring_manual") : NULL;
+    if (cJSON_IsNumber(ra) || cJSON_IsNumber(rm)) {
+        uint8_t cur_a, cur_m;
+        dv_status_led_get_policy(&cur_a, &cur_m);
+        if (cJSON_IsNumber(ra)) cur_a = (uint8_t)(ra->valueint < 0 ? 0 : ra->valueint > 2 ? 2 : ra->valueint);
+        if (cJSON_IsNumber(rm)) cur_m = (uint8_t)(rm->valueint < 0 ? 0 : rm->valueint > 2 ? 2 : rm->valueint);
+        if (dv_status_led_set_policy(cur_a, cur_m) == ESP_OK)
+            dv_status_led_apply_policy(dv_policy_get_mode() == DV_POLICY_MODE_AUTO);
+    }
     cJSON *open = body ? cJSON_GetObjectItemCaseSensitive(body, "bed_open_c") : NULL;
     cJSON *close = body ? cJSON_GetObjectItemCaseSensitive(body, "bed_close_c") : NULL;
+    if (!open && !close && (ra || rm)) { cJSON_Delete(body); ++s_api_revision; cJSON *reply = cJSON_CreateObject(); cJSON_AddItemToObject(reply, "state", make_state()); return send_json(req, reply); }
     if (!cJSON_IsNumber(open) || !cJSON_IsNumber(close)) { cJSON_Delete(body); return api_error(req, "400 Bad Request", "bed_open_c and bed_close_c are required"); }
     float open_c = (float)open->valuedouble, close_c = (float)close->valuedouble;
     cJSON_Delete(body);
@@ -401,6 +442,12 @@ static esp_err_t settings_post(httpd_req_t *req)
     cJSON *reply = cJSON_CreateObject();
     cJSON_AddItemToObject(reply, "state", make_state());
     return send_json(req, reply);
+}
+
+static void add_u8_array(cJSON *root, const char *key, const uint8_t *v, int n)
+{
+    cJSON *a = cJSON_AddArrayToObject(root, key);
+    for (int i = 0; i < n; ++i) cJSON_AddItemToArray(a, cJSON_CreateNumber(v[i]));
 }
 
 static void add_rgb(cJSON *root, const char *key, const uint8_t c[3])
@@ -438,6 +485,25 @@ static cJSON *lighting_json(void)
     cJSON *rs = cJSON_AddArrayToObject(root, "rev_strip");
     if (rs) { cJSON_AddItemToArray(rs, cJSON_CreateBool(c.rev_strip[0])); cJSON_AddItemToArray(rs, cJSON_CreateBool(c.rev_strip[1])); }
     cJSON_AddNumberToObject(root, "strips", dv_rgb_strip_count());
+    // v0.6 additions: per-state effects, direction, hot warning, striped progress.
+    cJSON_AddBoolToObject(root, "per_state", c.per_state);
+    add_u8_array(root, "fx_state", c.fx_state, 7);
+    add_u8_array(root, "br_state", c.br_state, 7);
+    add_u8_array(root, "sp_state", c.sp_state, 7);
+    add_u8_array(root, "dir_state", c.dir_state, 7);
+    cJSON_AddNumberToObject(root, "dir", c.dir);
+    cJSON_AddBoolToObject(root, "warn_on", c.warn_on);
+    cJSON_AddNumberToObject(root, "warn_c", c.warn_c);
+    add_rgb(root, "warn", c.warn);
+    cJSON_AddBoolToObject(root, "warn_blink", c.warn_blink);
+    add_rgb(root, "stripe_b", c.stripe_b);
+    cJSON_AddNumberToObject(root, "stripe_w", c.stripe_w);
+    uint16_t af = 0, ap = 0; uint8_t afps = 0;
+    dv_rgb_get_frames_info(&af, &ap, &afps);
+    cJSON *anim = cJSON_AddObjectToObject(root, "anim");
+    cJSON_AddNumberToObject(anim, "frames", af);
+    cJSON_AddNumberToObject(anim, "pixels", ap);
+    cJSON_AddNumberToObject(anim, "fps", afps);
     return root;
 }
 
@@ -475,6 +541,19 @@ static esp_err_t bambu_discovered_get(httpd_req_t *req)
     return send_json(req, root);
 }
 
+// Parse a fixed-length u8 array into out, only if present + fully valid.
+static void patch_u8_array(cJSON *body, const char *key, uint8_t *out, int n, int maxv)
+{
+    cJSON *a = cJSON_GetObjectItemCaseSensitive(body, key);
+    if (!cJSON_IsArray(a) || cJSON_GetArraySize(a) != n) return;
+    for (int i = 0; i < n; ++i)
+        if (!cJSON_IsNumber(cJSON_GetArrayItem(a, i))) return;
+    for (int i = 0; i < n; ++i) {
+        int v = cJSON_GetArrayItem(a, i)->valueint;
+        out[i] = (uint8_t)(v < 0 ? 0 : v > maxv ? maxv : v);
+    }
+}
+
 // Parse an [r,g,b] array (0-255) into out, only if present + valid.
 static void patch_rgb(cJSON *body, const char *key, uint8_t out[3])
 {
@@ -507,7 +586,7 @@ static esp_err_t lighting_post(httpd_req_t *req)
     }
     if ((e = cJSON_GetObjectItemCaseSensitive(body, "temp_min_c")) && cJSON_IsNumber(e)) c.temp_min_c = (uint8_t)e->valueint;
     if ((e = cJSON_GetObjectItemCaseSensitive(body, "temp_max_c")) && cJSON_IsNumber(e)) c.temp_max_c = (uint8_t)e->valueint;
-    if ((e = cJSON_GetObjectItemCaseSensitive(body, "effect")) && cJSON_IsNumber(e)) { int v = e->valueint; c.effect = (uint8_t)(v < 0 ? 0 : v > 7 ? 7 : v); }
+    if ((e = cJSON_GetObjectItemCaseSensitive(body, "effect")) && cJSON_IsNumber(e)) { int v = e->valueint; c.effect = (uint8_t)(v < 0 ? 0 : v > 11 ? 11 : v); }
     // Legacy global reverse -> apply to both strips (and drop the legacy flag).
     if ((e = cJSON_GetObjectItemCaseSensitive(body, "reverse")) && cJSON_IsBool(e)) { bool r = cJSON_IsTrue(e); c.reverse = false; c.rev_strip[0] = c.rev_strip[1] = r; }
     // Per-strip reverse: array of bools, one per strip (authoritative).
@@ -532,6 +611,22 @@ static esp_err_t lighting_post(httpd_req_t *req)
     patch_rgb(body, "prep", c.prep);
     patch_rgb(body, "paused", c.paused);
     patch_rgb(body, "complete", c.complete);
+    // v0.6 additions.
+    if ((e = cJSON_GetObjectItemCaseSensitive(body, "per_state")) && cJSON_IsBool(e)) c.per_state = cJSON_IsTrue(e);
+    patch_u8_array(body, "fx_state", c.fx_state, 7, 11);
+    patch_u8_array(body, "br_state", c.br_state, 7, 255);
+    patch_u8_array(body, "sp_state", c.sp_state, 7, 255);
+    patch_u8_array(body, "dir_state", c.dir_state, 7, 1);
+    if ((e = cJSON_GetObjectItemCaseSensitive(body, "dir"))) {
+        if (cJSON_IsBool(e)) c.dir = cJSON_IsTrue(e);
+        else if (cJSON_IsNumber(e)) c.dir = e->valueint ? 1 : 0;
+    }
+    if ((e = cJSON_GetObjectItemCaseSensitive(body, "warn_on")) && cJSON_IsBool(e)) c.warn_on = cJSON_IsTrue(e);
+    if ((e = cJSON_GetObjectItemCaseSensitive(body, "warn_c")) && cJSON_IsNumber(e)) { int v = e->valueint; c.warn_c = (uint8_t)(v < 0 ? 0 : v > 120 ? 120 : v); }
+    patch_rgb(body, "warn", c.warn);
+    if ((e = cJSON_GetObjectItemCaseSensitive(body, "warn_blink")) && cJSON_IsBool(e)) c.warn_blink = cJSON_IsTrue(e);
+    patch_rgb(body, "stripe_b", c.stripe_b);
+    if ((e = cJSON_GetObjectItemCaseSensitive(body, "stripe_w")) && cJSON_IsNumber(e)) { int v = e->valueint; c.stripe_w = (uint8_t)(v < 1 ? 1 : v > 15 ? 15 : v); }
     cJSON_Delete(body);
 
     dv_rgb_set_config(&c);
@@ -621,6 +716,26 @@ static cJSON *describe_product(void *ctx)
     (void)ctx;
     cJSON *root = cJSON_CreateObject(), *sections = cJSON_AddArrayToObject(root, "sections");
 
+    // Device identity: the mDNS hostname, NVS-backed (stock's set_hostname).
+    // Applied by app_main before dc_wifi_start(), so it needs a reboot.
+    {
+        char hostname[32] = "vent1";
+        nvs_handle_t hn;
+        if (nvs_open(DV_NVS_NS, NVS_READONLY, &hn) == ESP_OK) {
+            char saved[32]; size_t hl = sizeof saved;
+            if (nvs_get_str(hn, "hostname", saved, &hl) == ESP_OK && saved[0])
+                snprintf(hostname, sizeof hostname, "%s", saved);
+            nvs_close(hn);
+        }
+        cJSON *device = cJSON_CreateObject();
+        cJSON_AddStringToObject(device, "title", "Device identity");
+        cJSON_AddStringToObject(device, "description",
+            "Hostname for <name>.local. Lowercase letters, digits and hyphens, up to 31 characters. Takes effect after a restart.");
+        cJSON *dfields = cJSON_AddArrayToObject(device, "fields");
+        field(dfields, "hostname", "Hostname", "text", hostname);
+        cJSON_AddItemToArray(sections, device);
+    }
+
     // The selector lives alone in an always-visible section; the per-source
     // sections below reveal against it. The SPA looks the controlling field up
     // across the whole setup host, so it does not need to share their card.
@@ -707,9 +822,52 @@ static bool number_value(const cJSON *values, const char *key, double *out)
     return false;
 }
 
+static bool hostname_valid(const char *s)
+{
+    size_t n = strlen(s);
+    if (n < 1 || n > 31) return false;
+    if (s[0] == '-' || s[n - 1] == '-') return false;
+    for (size_t i = 0; i < n; ++i) {
+        char ch = s[i];
+        if (!((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-')) return false;
+    }
+    return true;
+}
+
 static esp_err_t apply_product(const cJSON *values, void *ctx, char *message, size_t message_size)
 {
     (void)ctx;
+    bool hostname_changed = false;
+    const char *hostname = string_value(values, "hostname");
+    if (hostname && hostname[0]) {
+        char lower[32];
+        snprintf(lower, sizeof lower, "%s", hostname);
+        for (char *ch = lower; *ch; ++ch)
+            if (*ch >= 'A' && *ch <= 'Z') *ch += 'a' - 'A';
+        if (!hostname_valid(lower)) {
+            snprintf(message, message_size, "Hostname must be 1-31 of a-z, 0-9, hyphen (not at the ends)");
+            return ESP_ERR_INVALID_ARG;
+        }
+        nvs_handle_t hn;
+        if (nvs_open(DV_NVS_NS, NVS_READWRITE, &hn) != ESP_OK) {
+            snprintf(message, message_size, "Could not open storage");
+            return ESP_FAIL;
+        }
+        char cur[32] = ""; size_t cl = sizeof cur;
+        (void)nvs_get_str(hn, "hostname", cur, &cl);
+        if (strcmp(cur, lower) != 0) {
+            esp_err_t herr = nvs_set_str(hn, "hostname", lower);
+            if (herr == ESP_OK) herr = nvs_commit(hn);
+            if (herr != ESP_OK) {
+                nvs_close(hn);
+                snprintf(message, message_size, "Could not save the hostname");
+                return herr;
+            }
+            hostname_changed = true;
+            dc_evlog_add("hostname set to %s (restart to apply)", lower);
+        }
+        nvs_close(hn);
+    }
     const char *source_text = string_value(values, "source");
     dc_ctl_source_t source = dc_source_get();
     if (source_text) {
@@ -769,7 +927,9 @@ static esp_err_t apply_product(const cJSON *values, void *ctx, char *message, si
         dv_policy_set_thresholds((float)open_c, (float)close_c) != ESP_OK) {
         snprintf(message, message_size, "Open temperature must be above close temperature"); return ESP_ERR_INVALID_ARG;
     }
-    snprintf(message, message_size, "Settings saved. Restart to apply a source change.");
+    snprintf(message, message_size, hostname_changed
+             ? "Settings saved. Restart to apply the hostname."
+             : "Settings saved. Source and printer changes apply immediately; a hostname change needs a restart.");
     return ESP_OK;
 }
 
@@ -781,6 +941,93 @@ static esp_err_t factory_reset(void *ctx)
     if (first == ESP_OK) first = dc_source_set(DC_SRC_KLIPPER);
     if (first == ESP_OK) first = dv_policy_clear();
     return first;
+}
+
+// POST /api/v2/bambu/unbind — drop the bound printer NOW (wipes the saved
+// binding and disconnects). The stock firmware's "disconnect"; DragonVent's
+// only path here used to be a full factory reset.
+static esp_err_t bambu_unbind_post(httpd_req_t *req)
+{
+    if (auth_reject(req)) return ESP_OK;
+    esp_err_t err = dc_bambu_clear_config();
+    if (err != ESP_OK) return api_error(req, "500 Internal Server Error", esp_err_to_name(err));
+    dc_evlog_add("bambu: printer unbound");
+    ++s_api_revision;
+    cJSON *reply = cJSON_CreateObject();
+    cJSON_AddBoolToObject(reply, "ok", true);
+    cJSON_AddItemToObject(reply, "state", make_state());
+    return send_json(req, reply);
+}
+
+// POST /api/v2/system/restart — plain reboot. Until now only OTA and factory
+// reset rebooted the device, so config that applies "on next boot" had no
+// sanctioned way to be applied.
+static esp_err_t restart_post(httpd_req_t *req)
+{
+    if (auth_reject(req)) return ESP_OK;
+    dc_evlog_add("restart requested via API");
+    cJSON *reply = cJSON_CreateObject();
+    cJSON_AddBoolToObject(reply, "ok", true);
+    cJSON_AddBoolToObject(reply, "rebooting", true);
+    send_json(req, reply);
+    vTaskDelay(pdMS_TO_TICKS(500));
+    esp_restart();
+    return ESP_OK;   // unreachable
+}
+
+// RAM animation upload. Binary body: 'D' 'V' fps pixels frames_lo frames_hi,
+// then frames*pixels*3 RGB bytes. Lives in heap only — lost on reboot, which is
+// the deliberate trade that keeps the stock partition table and the
+// OTA-back-to-stock path intact.
+#define DV_ANIM_MAX_BYTES (128 * 1024)
+
+static esp_err_t anim_get(httpd_req_t *req)
+{
+    uint16_t frames = 0, pixels = 0; uint8_t fps = 0;
+    dv_rgb_get_frames_info(&frames, &pixels, &fps);
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddNumberToObject(root, "frames", frames);
+    cJSON_AddNumberToObject(root, "pixels", pixels);
+    cJSON_AddNumberToObject(root, "fps", fps);
+    cJSON_AddBoolToObject(root, "loaded", frames > 0);
+    return send_json(req, root);
+}
+
+static esp_err_t anim_post(httpd_req_t *req)
+{
+    if (auth_reject(req)) return ESP_OK;
+    size_t len = req->content_len;
+    if (len < 6 + 3 || len > 6 + DV_ANIM_MAX_BYTES)
+        return api_error(req, "400 Bad Request", "animation payload out of range");
+    uint8_t *buf = malloc(len);
+    if (buf == NULL) return api_error(req, "500 Internal Server Error", "not enough memory for the animation");
+    size_t got = 0;
+    while (got < len) {
+        int r = httpd_req_recv(req, (char *)buf + got, len - got);
+        if (r <= 0) { free(buf); return api_error(req, "400 Bad Request", "upload interrupted"); }
+        got += (size_t)r;
+    }
+    if (buf[0] != 'D' || buf[1] != 'V') { free(buf); return api_error(req, "400 Bad Request", "bad animation header"); }
+    uint8_t fps = buf[2], pixels = buf[3];
+    uint16_t frames = (uint16_t)buf[4] | ((uint16_t)buf[5] << 8);
+    if (pixels == 0 || frames == 0 || len != 6 + (size_t)frames * pixels * 3) {
+        free(buf);
+        return api_error(req, "400 Bad Request", "animation size does not match header");
+    }
+    esp_err_t err = dv_rgb_set_frames(buf + 6, frames, pixels, fps);
+    free(buf);
+    if (err != ESP_OK) return api_error(req, "400 Bad Request", esp_err_to_name(err));
+    dc_evlog_add("animation loaded: %u frames @ %u px", (unsigned)frames, (unsigned)pixels);
+    ++s_api_revision;
+    return anim_get(req);
+}
+
+static esp_err_t anim_delete(httpd_req_t *req)
+{
+    if (auth_reject(req)) return ESP_OK;
+    (void)dv_rgb_set_frames(NULL, 0, 0, 0);
+    ++s_api_revision;
+    return anim_get(req);
 }
 
 esp_err_t dv_portal_start(void)
@@ -797,6 +1044,11 @@ esp_err_t dv_portal_start(void)
         { .uri = "/api/v2/filament", .method = HTTP_POST, .handler = filament_post },
         { .uri = "/api/v2/bambu/discovered", .method = HTTP_GET, .handler = bambu_discovered_get },
         { .uri = "/api/v2/bambu/scan", .method = HTTP_POST, .handler = bambu_scan_post },
+        { .uri = "/api/v2/bambu/unbind", .method = HTTP_POST, .handler = bambu_unbind_post },
+        { .uri = "/api/v2/system/restart", .method = HTTP_POST, .handler = restart_post },
+        { .uri = "/api/v2/anim", .method = HTTP_GET, .handler = anim_get },
+        { .uri = "/api/v2/anim", .method = HTTP_POST, .handler = anim_post },
+        { .uri = "/api/v2/anim", .method = HTTP_DELETE, .handler = anim_delete },
     };
     const dc_portal_config_t config = {
         .product = "dragonvent", .display_name = "DragonVent",

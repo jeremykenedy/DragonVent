@@ -575,6 +575,12 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
 @container (max-width:520px){ .status-hero,.status-grid{ grid-template-columns:1fr; } .status-orb{ width:112px; } }
 .provision-overlay{ position:fixed; inset:0; z-index:20; overflow:auto; padding:18px;
   background:var(--background); }
+/* Setup opened from a running product keeps the drawer beside it; full-screen
+   is reserved for recovery/AP mode where no product surface exists yet. */
+.provision-overlay.with-rail{ left:49px; }
+@media(max-width:600px){ .provision-overlay.with-rail{ left:41px; } }
+.ln-swatch{ display:inline-block; width:14px; height:14px; border-radius:3px;
+  border:1px solid var(--border); margin-right:6px; vertical-align:-2px; }
 .provision-shell{ width:min(680px,100%); margin:0 auto; display:flex; flex-direction:column; gap:10px; }
 .provision-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
 #dc-product-setup{ display:flex; flex-direction:column; gap:10px; }
@@ -1045,7 +1051,7 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
 
 <div class="app vent-app" id="dv-app" data-online="0" data-vent-target="closed" data-vent-running="0" hidden>
   <div class="shell">
-    <nav class="rail" aria-label="DragonVent navigation">
+    <nav class="rail" aria-label="PandaVent navigation">
       <div class="connection" aria-label="Connection"><i class="dot"></i><span id="dv-conn">Connecting…</span></div>
       <button class="tab vent-tab" type="button" data-vent-page="home" aria-selected="true" aria-label="Dashboard"><svg class="icon"><use href="#i-house"/></svg></button>
       <button class="tab vent-tab" type="button" data-vent-page="manual" aria-selected="false" aria-label="Manual vent control"><svg class="icon"><use href="#i-vent"/></svg></button>
@@ -1066,7 +1072,7 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
               <div class="vent-mark"><strong id="dv-position">--</strong><span>vent</span></div>
             </div>
             <div class="vent-copy">
-              <h2 id="dv-headline">DragonVent</h2>
+              <h2 id="dv-headline">PandaVent</h2>
               <p id="dv-summary">Connecting to the vent controller…</p>
               <span class="vent-chip" id="dv-mode-chip">-- mode</span>
             </div>
@@ -1085,6 +1091,18 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
               <div><dt>Fans</dt><dd id="dv-fanline">--</dd></div>
               <div><dt>Wi-Fi</dt><dd id="dv-wifi">--</dd></div>
               <div><dt>Motor groups</dt><dd id="dv-groups">--</dd></div>
+            </dl>
+          </article>
+
+          <article class="card vent-status" id="dv-lightnow">
+            <h3>Lighting now</h3>
+            <dl class="status-detail">
+              <div><dt>Showing</dt><dd id="dv-ln-layer">--</dd></div>
+              <div><dt>Color</dt><dd><span class="ln-swatch" id="dv-ln-swatch"></span><span id="dv-ln-color">--</span></dd></div>
+              <div><dt>Effect</dt><dd id="dv-ln-effect">--</dd></div>
+              <div><dt>Brightness</dt><dd id="dv-ln-bright">--</dd></div>
+              <div><dt>Speed</dt><dd id="dv-ln-speed">--</dd></div>
+              <div><dt>Direction</dt><dd id="dv-ln-dir">--</dd></div>
             </dl>
           </article>
 
@@ -1159,7 +1177,7 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
       <section class="vent-view vent-mode-page" data-vent-content="fans" data-capability="printer_fans">
         <div>
           <h3>Printer fans</h3>
-          <p class="set-note">Drive the printer's chamber exhaust directly. This is the one control that writes to the printer; everything else DragonVent does is read-only. The automatic vent policy is unaffected.</p>
+          <p class="set-note">Drive the printer's chamber exhaust directly. This is the one control that writes to the printer; everything else PandaVent does is read-only. The automatic vent policy is unaffected.</p>
         </div>
 
         <div class="ctl-group">
@@ -1305,7 +1323,7 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
         </article>
       </section>
 
-      <div class="app-version">DragonVent <span id="dv-footer-version">—</span></div>
+      <div class="app-version">PandaVent <span id="dv-footer-version">—</span></div>
     </main>
   </div>
 </div>
@@ -1419,7 +1437,7 @@ window.t=function(x){ if(window.dvLang!=='zh'||x==null) return x; var d=window.D
 window.DV_ZH={
 "Dashboard":"仪表盘","Manual vent control":"手动风阀控制","Automatic vent policy":"自动风阀策略","Automatic policy":"自动策略",
 "Printer fans":"打印机风扇","Lighting":"灯效","Settings":"设置","Network setup":"网络设置","Printer setup":"打印机设置",
-"DragonVent navigation":"DragonVent 导航","Connection":"连接状态","Connecting…":"连接中…","Connecting to the vent controller…":"正在连接风阀控制器…",
+"PandaVent navigation":"PandaVent 导航","Connection":"连接状态","Connecting…":"连接中…","Connecting to the vent controller…":"正在连接风阀控制器…",
 "Quick vent actions":"快捷风阀操作","Open":"打开","Close":"关闭","Auto":"自动","Max airflow":"最大风量","Seal chamber":"密封仓体",
 "Printer & controller":"打印机与控制器","Source":"数据源","Link":"连接","Printer":"打印机","Bed":"热床","Material":"耗材","State":"状态",
 "Nozzle":"喷嘴","Chamber":"仓温","Device":"设备","Device ID":"设备 ID","Firmware":"固件","Motor groups":"电机组","Endstops":"限位",
@@ -1456,7 +1474,7 @@ window.DV_ZH={
 "Appearance":"外观","System":"跟随系统","Light":"浅色","Dark":"深色","Language":"语言",
 "Fans":"风扇","Chamber exhaust":"仓体排风","Chamber fan speed":"仓体风扇转速","Reported speeds":"上报转速","Part cooling":"部件冷却","Auxiliary":"辅助","Heatbreak":"喉管",
 "Increase chamber fan":"提高仓体风扇","Decrease chamber fan":"降低仓体风扇","Max":"最大",
-"Drive the printer's chamber exhaust directly. This is the one control that writes to the printer; everything else DragonVent does is read-only. The automatic vent policy is unaffected.":"直接控制打印机的仓体排风。这是唯一会写入打印机的控制；DragonVent 其余功能全部只读。自动风阀策略不受影响。",
+"Drive the printer's chamber exhaust directly. This is the one control that writes to the printer; everything else PandaVent does is read-only. The automatic vent policy is unaffected.":"直接控制打印机的仓体排风。这是唯一会写入打印机的控制；PandaVent 其余功能全部只读。自动风阀策略不受影响。",
 "Live from the printer's own status report. The printer is the authority: if it overrides a value at a layer change, it shows up here.":"来自打印机自身状态上报。以打印机为准：若换层时被覆盖，这里会同步显示。",
 "Device setup":"设备设置","Wi-Fi":"Wi-Fi","Network":"网络","Hidden SSID":"隐藏 SSID","Password":"密码","Rescan":"重新扫描","Save Wi-Fi & reboot":"保存 Wi-Fi 并重启",
 "Fallback setup AP":"备用设置热点","SSID (blank = default)":"SSID（留空为默认）","Password (blank = default)":"密码（留空为默认）","Gateway IPv4":"网关 IPv4","Fallback":"备用热点","Enabled":"启用","Disabled":"停用","Save AP & reboot":"保存热点并重启",
@@ -1471,6 +1489,7 @@ window.DV_ZH={
 "Bambu host":"拓竹主机","Bambu serial":"拓竹序列号","Bambu access code":"拓竹访问码","Search for printers on the network":"在网络中搜索打印机","Search for printers":"搜索打印机",
 "Open at °C":"打开温度 °C","Close below °C":"关闭温度 °C",
 "No results yet":"暂无结果","Searching…":"搜索中…","None found — try again":"未找到，请重试",
+"Lighting now":"当前灯效","Showing":"正在显示","Global":"全局","Per-state":"按状态","Error flash":"错误闪烁","Direction":"方向","Color":"颜色",
 "MOVING":"移动中","OPEN":"已开","CLOSED":"已关","STOPPED":"已停止",
 "Vent in motion":"风阀动作中","Airflow open":"排风已开启","Chamber sealed":"仓体已密封","Vent stopped":"风阀已停止",
 "AUTO mode":"自动模式","MANUAL mode":"手动模式",
@@ -1670,7 +1689,7 @@ window.DV_ZH={
   function loadProvisioning(){
     return dcFetchJson('/api/v1/provisioning',{cache:'no-store'}).then(applyProvisioning);
   }
-  function openProvisioning(target){ $('dc-provisioning').hidden=false; location.hash='setup'; loadProvisioning().then(function(){ if(target){var el=$(target); if(el)el.scrollIntoView({behavior:'smooth',block:'start'}); } }).catch(function(){setupMessage('dc-system-msg','Provisioning service is unavailable in this firmware.',true);}); }
+  function openProvisioning(target){ var ov=$('dc-provisioning'); ov.classList.toggle('with-rail', !!document.querySelector('.app:not([hidden])')); ov.hidden=false; location.hash='setup'; loadProvisioning().then(function(){ if(target){var el=$(target); if(el)el.scrollIntoView({behavior:'smooth',block:'start'}); } }).catch(function(){setupMessage('dc-system-msg','Provisioning service is unavailable in this firmware.',true);}); }
   document.querySelectorAll('[data-open-provisioning]').forEach(function(a){a.addEventListener('click',function(e){e.preventDefault();openProvisioning(a.dataset.provisionTarget);});});
   $('dc-setup-close').addEventListener('click',function(){$('dc-provisioning').hidden=true;if(location.hash==='#setup')history.replaceState(null,'',location.pathname);});
   $('dc-wifi-scan').addEventListener('click',function(){setupMessage('dc-wifi-msg','Scanning…');dcRequest('/api/v1/provisioning/scan',{}).then(function(){setTimeout(loadProvisioning,1800);}).catch(function(j){setupMessage('dc-wifi-msg',j.error||'Scan failed.',true);});});
@@ -1754,7 +1773,7 @@ window.DV_ZH={
       statusApp.hidden=true;
       ventApp.hidden=false;
       ventApp.setAttribute('data-online','0');
-      document.title=ui.display_name||'DragonVent';
+      document.title=ui.display_name||'PandaVent';
       u('dv-version', i.firmware||'--');
       u('dv-footer-version', i.firmware||'—');
       u('dv-device-id', i.device_id||'--');
@@ -2197,7 +2216,7 @@ window.DV_ZH={
     if(!s || s.api_version!==2 || !s.vent) return;
     if(product!=='dragonvent'){
       applyDeviceInfo({firmware:s.firmware, device_id:s.device_id,
-        ui:{schema:1,product:'dragonvent',display_name:'DragonVent'}});
+        ui:{schema:1,product:'dragonvent',display_name:'PandaVent'}});
     }
     var v=s.vent||{}, p=s.printer||{}, pol=s.policy||{}, w=s.wifi||{};
     var target=v.target||'stop', running=!!v.running;
@@ -2235,6 +2254,27 @@ window.DV_ZH={
     var sc = f.scale || 15;
     function fpc(x){ return (x==null||x<0) ? DASH : Math.round(x*100/sc)+'%'; }
     u('dv-fanline', 'part '+fpc(f.part)+' · aux '+fpc(f.aux)+' · chamber '+fpc(f.chamber));
+
+    /* Lighting-now card: the firmware reports the RESOLVED render (layer
+       precedence included), so this is display only, never re-derived. */
+    var ln = s.lighting;
+    if(ln && $('dv-ln-effect')){
+      var PS_WIRE={none:'Idle',idle:'Idle',preparing:'Preparing',printing:'Printing',paused:'Paused',complete:'Completed',error:'Error'};
+      var showing = !ln.on ? t('Off')
+        : ln.layer==='error' ? t('Error flash')
+        : ln.layer==='warning' ? t('Hot-bed warning')
+        : ln.per_state ? (t('Per-state')+': '+t(PS_WIRE[ln.state]||'Idle'))
+        : t('Global');
+      u('dv-ln-layer', showing);
+      var lc = ln.color||[0,0,0];
+      var sw = $('dv-ln-swatch');
+      if(sw) sw.style.background = 'rgb('+lc[0]+','+lc[1]+','+lc[2]+')';
+      u('dv-ln-color', ln.on ? rgbToHex(lc) : '—');
+      u('dv-ln-effect', ln.on ? (PS_FX[ln.effect]||'Solid') : '—');
+      u('dv-ln-bright', ln.on ? Math.round((ln.brightness||0)*100/255)+'%' : '—');
+      u('dv-ln-speed', ln.on ? String(ln.speed) : '—');
+      u('dv-ln-dir', ln.on ? (ln.dir ? 'Reverse' : 'Forward') : '—');
+    }
 
     /* Job card. Hidden entirely when nothing is printing — an empty progress
        bar reading 0% looks like a stalled print rather than an idle machine. */
@@ -3015,7 +3055,12 @@ window.DV_ZH={
   /* DragonVent navigation and commands. These handlers are inert while the
      DragonBreath subtree is active. */
   document.querySelectorAll('.vent-tab').forEach(function(tab){
-    tab.addEventListener('click',function(){ ventActivatePage(tab.dataset.ventPage); });
+    tab.addEventListener('click',function(){
+      if(!tab.dataset.ventPage) return;   // Network/Printer anchors open setup instead
+      var ov=$('dc-provisioning');
+      if(ov && !ov.hidden){ ov.hidden=true; if(location.hash==='#setup') history.replaceState(null,'',location.pathname); }
+      ventActivatePage(tab.dataset.ventPage);
+    });
   });
   function doVentManual(target,msgId){
     ventFlash(msgId,'Moving vent '+target+'…');

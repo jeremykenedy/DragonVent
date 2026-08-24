@@ -25,6 +25,8 @@
 #include "esp_wifi.h"
 #include "nvs.h"
 
+static void add_rgb(cJSON *root, const char *key, const uint8_t c[3]);
+
 static uint32_t s_api_revision = 1;
 
 // Control token. Same NVS namespace and key as DragonBreath so the family stays
@@ -300,6 +302,25 @@ static cJSON *make_state(void)
     cJSON_AddNumberToObject(policy, "bed_open_c", open_c);
     cJSON_AddNumberToObject(policy, "bed_close_c", close_c);
 
+    // What the strips are showing right now, resolved by the firmware so the
+    // dashboard never re-derives layer precedence. Read-only display data.
+    {
+        static const char *layer_names[] = { "off", "active", "warning", "error" };
+        static const char *ps_names[] = { "none", "idle", "preparing", "printing", "paused", "complete", "error" };
+        dv_rgb_active_t act = {0};
+        dv_rgb_get_active(&act);
+        cJSON *ln = cJSON_AddObjectToObject(root, "lighting");
+        cJSON_AddBoolToObject(ln, "on", act.enabled);
+        cJSON_AddStringToObject(ln, "layer", layer_names[act.layer <= 3 ? act.layer : 0]);
+        cJSON_AddNumberToObject(ln, "effect", act.fx);
+        add_rgb(ln, "color", act.color);
+        cJSON_AddNumberToObject(ln, "brightness", act.bright);
+        cJSON_AddNumberToObject(ln, "speed", act.speed);
+        cJSON_AddNumberToObject(ln, "dir", act.dir);
+        cJSON_AddBoolToObject(ln, "per_state", act.per_state);
+        cJSON_AddStringToObject(ln, "state", ps_names[act.pstate <= 6 ? act.pstate : 0]);
+    }
+
     cJSON *wifi = cJSON_AddObjectToObject(root, "wifi");
     cJSON_AddStringToObject(wifi, "state", wifi_wire(dc_wifi_state()));
     if (dc_wifi_state() == DC_WIFI_STATE_STA_CONNECTED) {
@@ -333,7 +354,7 @@ static esp_err_t info_get(httpd_req_t *req)
     cJSON *ui = cJSON_AddObjectToObject(root, "ui");
     cJSON_AddNumberToObject(ui, "schema", 1);
     cJSON_AddStringToObject(ui, "product", "dragonvent");
-    cJSON_AddStringToObject(ui, "display_name", "DragonVent");
+    cJSON_AddStringToObject(ui, "display_name", "PandaVent");
     // Opt into the shared SPA's update check (dragon-core >= v0.7.0). It asks
     // GitHub for the latest stable release of this repo and, when newer, shows
     // the version, the expected SHA-256 and a download link — it never
@@ -707,7 +728,7 @@ static esp_err_t validate_image(const esp_app_desc_t *image, void *ctx,
     if (!strcmp(image->project_name, "dragonvent") || !strcmp(image->project_name, "panda_vent"))
         return ESP_OK;
     snprintf(message, message_size,
-             "Not a DragonVent or stock Panda Vent image (got \"%s\").", image->project_name);
+             "Not a PandaVent/DragonVent or stock Panda Vent image (got \"%s\").", image->project_name);
     return ESP_ERR_INVALID_ARG;
 }
 

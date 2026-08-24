@@ -48,6 +48,7 @@ static int s_pstatus = DV_PS_NONE;
 static bool s_printing, s_error;
 static float s_bed = NAN;
 static float s_progress = -1.0f;
+static dv_rgb_active_t s_active;
 
 static const uint8_t *printer_status_color(void)
 {
@@ -133,12 +134,20 @@ static void resolve_render(uint8_t *fx, uint8_t *bright, uint8_t *speed, uint8_t
  * shared renderer paints the selected color/effect over the declared layout. */
 static void apply_locked(void)
 {
-    if (!s_cfg.enabled) { (void)dc_lighting_off(); return; }
+    if (!s_cfg.enabled) {
+        s_active = (dv_rgb_active_t){0};
+        (void)dc_lighting_off();
+        return;
+    }
     (void)dc_lighting_set_progress(s_progress);
     (void)dc_lighting_set_stripe((dc_rgb_t){s_cfg.stripe_b[0], s_cfg.stripe_b[1], s_cfg.stripe_b[2]},
                                  s_cfg.stripe_w);
     /* A print error takes top precedence and flashes to demand attention. */
     if (s_cfg.use_error && s_error) {
+        s_active = (dv_rgb_active_t){ .enabled = 1, .layer = 3, .fx = DV_FX_STROBE,
+            .color = {s_cfg.error[0], s_cfg.error[1], s_cfg.error[2]},
+            .bright = s_cfg.brightness, .speed = 64, .dir = 0,
+            .pstate = (uint8_t)s_pstatus, .per_state = s_cfg.per_state };
         (void)dc_lighting_set_brightness(s_cfg.brightness);
         (void)dc_lighting_set((dc_rgb_t){s_cfg.error[0], s_cfg.error[1], s_cfg.error[2]}, DC_LIGHTING_STROBE, 64);
         return;
@@ -146,6 +155,11 @@ static void apply_locked(void)
     /* Hot-bed warning sits above every normal layer (but below a print error):
      * at/over the threshold the strips demand attention in the warning color. */
     if (s_cfg.warn_on && !isnan(s_bed) && s_bed >= (float)s_cfg.warn_c) {
+        s_active = (dv_rgb_active_t){ .enabled = 1, .layer = 2,
+            .fx = s_cfg.warn_blink ? DV_FX_STROBE : DV_FX_SOLID,
+            .color = {s_cfg.warn[0], s_cfg.warn[1], s_cfg.warn[2]},
+            .bright = s_cfg.brightness, .speed = 96, .dir = 0,
+            .pstate = (uint8_t)s_pstatus, .per_state = s_cfg.per_state };
         (void)dc_lighting_set_brightness(s_cfg.brightness);
         (void)dc_lighting_set((dc_rgb_t){s_cfg.warn[0], s_cfg.warn[1], s_cfg.warn[2]},
                               s_cfg.warn_blink ? DC_LIGHTING_STROBE : DC_LIGHTING_SOLID, 96);
@@ -153,10 +167,23 @@ static void apply_locked(void)
     }
     uint8_t fx, bright, speed, dir;
     resolve_render(&fx, &bright, &speed, &dir);
+    dc_rgb_t base = base_color();
+    s_active = (dv_rgb_active_t){ .enabled = 1, .layer = 1, .fx = fx,
+        .color = {base.r, base.g, base.b}, .bright = bright, .speed = speed,
+        .dir = dir, .pstate = (uint8_t)s_pstatus,
+        .per_state = (uint8_t)(s_cfg.mode == DV_LIGHT_MODE_PRINTER && s_cfg.per_state) };
     (void)dc_lighting_set_brightness(bright);
     (void)dc_lighting_set_direction(dir != 0);
     /* Cylon uses the resolved state color, like the other effects. */
-    (void)dc_lighting_set(base_color(), core_effect(fx), speed);
+    (void)dc_lighting_set(base, core_effect(fx), speed);
+}
+
+void dv_rgb_get_active(dv_rgb_active_t *out)
+{
+    if (!out) return;
+    if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
+    *out = s_active;
+    if (s_lock) xSemaphoreGive(s_lock);
 }
 
 void dv_rgb_get_config(dv_lighting_t *out)

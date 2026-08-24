@@ -103,6 +103,22 @@ esp_err_t dv_rgb_start(void);
 // negative when no job is active (drives the progress effects).
 void dv_rgb_update(int target, int status, float bed_temp_c, float progress);
 
+// Snapshot of what the strips are showing RIGHT NOW, resolved by the policy
+// (error flash > hot warning > per-state or global). For read-only display.
+typedef struct {
+    uint8_t enabled;   // 0 = lighting off
+    uint8_t layer;     // 0 off, 1 normal, 2 hot warning, 3 error flash
+    uint8_t fx;        // dv_light_fx_t being rendered
+    uint8_t color[3];  // base color being rendered
+    uint8_t bright;    // effective brightness
+    uint8_t speed;     // effective speed
+    uint8_t dir;       // effective direction (0 fwd, 1 rev)
+    uint8_t pstate;    // dv_printer_status_t driving a per-state pick
+    uint8_t per_state; // per-state mode active for the current render
+} dv_rgb_active_t;
+
+void dv_rgb_get_active(dv_rgb_active_t *out);
+
 // Upload / clear the RAM animation played by DV_FX_CUSTOM (see dc_lighting).
 esp_err_t dv_rgb_set_frames(const uint8_t *rgb, uint16_t frames, uint16_t pixels, uint8_t fps);
 void dv_rgb_get_frames_info(uint16_t *frames, uint16_t *pixels, uint8_t *fps);

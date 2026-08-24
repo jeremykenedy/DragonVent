@@ -37,8 +37,8 @@ static esp_err_t configure_network_identity(void)
     }
     const dc_wifi_identity_t identity = {
         .hostname = hostname,
-        .instance_name = "DragonVent",
-        .ap_ssid_prefix = "DragonVent_",
+        .instance_name = "PandaVent",
+        .ap_ssid_prefix = "PandaVent_",
         .ap_password = DC_WIFI_DEFAULT_AP_PASSWORD,
     };
     return dc_wifi_set_identity(&identity);

@@ -1301,6 +1301,7 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
             <button class="btn btn-sm" type="button" data-theme-set="light" aria-pressed="false">Light</button>
             <button class="btn btn-sm" type="button" data-theme-set="dark" aria-pressed="false">Dark</button>
           </div>
+          <div class="light-row"><label for="dv-lang">Language</label><select id="dv-lang"><option value="en">English</option><option value="zh">中文</option></select></div>
         </article>
       </section>
 
@@ -1407,6 +1408,87 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
 </section>
 
 <script>
+/* ---- Language (EN / Simplified Chinese) -----------------------------------
+   A flat dictionary keyed by the exact English UI string. t() is identity in
+   English; in Chinese it returns the mapping when one exists, otherwise the
+   original string (numbers and compounds pass through). The choice lives in
+   localStorage per browser; switching reloads so the static DOM re-translates
+   from a clean English document. */
+window.dvLang=(function(){try{return localStorage.getItem('dv-lang')||'en';}catch(e){return 'en';}})();
+window.t=function(x){ if(window.dvLang!=='zh'||x==null) return x; var d=window.DV_ZH; return d[x]||d[String(x).trim()]||x; };
+window.DV_ZH={
+"Dashboard":"仪表盘","Manual vent control":"手动风阀控制","Automatic vent policy":"自动风阀策略","Automatic policy":"自动策略",
+"Printer fans":"打印机风扇","Lighting":"灯效","Settings":"设置","Network setup":"网络设置","Printer setup":"打印机设置",
+"DragonVent navigation":"DragonVent 导航","Connection":"连接状态","Connecting…":"连接中…","Connecting to the vent controller…":"正在连接风阀控制器…",
+"Quick vent actions":"快捷风阀操作","Open":"打开","Close":"关闭","Auto":"自动","Max airflow":"最大风量","Seal chamber":"密封仓体",
+"Printer & controller":"打印机与控制器","Source":"数据源","Link":"连接","Printer":"打印机","Bed":"热床","Material":"耗材","State":"状态",
+"Nozzle":"喷嘴","Chamber":"仓温","Device":"设备","Device ID":"设备 ID","Firmware":"固件","Motor groups":"电机组","Endstops":"限位",
+"Filament rules":"耗材规则","Add filament":"添加耗材","Save filament rules":"保存耗材规则","Detected now:":"当前检测：",
+"During a print, seal the chamber for these filaments and vent for everything else. Matched by name prefix (PLA matches PLA+). Detected now:":"打印时对这些耗材密封仓体，其余耗材排风。按名称前缀匹配（PLA 匹配 PLA+）。当前检测：",
+"Open while printing or when the bed is hot. Close after the printer is idle and the bed cools below the lower threshold.":"打印中或热床温度高时打开。打印机空闲且热床降到下限温度后关闭。",
+"Open at":"打开于","Close below":"低于则关闭","Save & enable Auto":"保存并启用自动",
+"Take direct control of every detected vent group. Automatic printer-following pauses until Auto is selected again.":"直接控制所有检测到的风阀电机组。自动跟随将暂停，重新选择“自动”后恢复。",
+"Vent lighting":"风阀灯效","Lighting on":"灯效开关","Brightness":"亮度","Color follows":"颜色跟随","Vent state":"风阀状态","Printer status":"打印机状态",
+"Open color (cool)":"打开颜色（冷）","Closed color (hot)":"关闭颜色（热）","Show a color while printing":"打印时显示颜色","Printing color":"打印中颜色",
+"Temperature gradient":"温度渐变","Gradient range °C":"渐变范围 °C","Effect":"灯光效果","Effect speed":"效果速度",
+"Animation direction":"动画方向","Forward":"正向","Reverse":"反向","Stripe second color":"条纹第二颜色","Stripe width (px)":"条纹宽度（像素）",
+"Reverse strip 1":"反转灯带 1","Reverse strip 2":"反转灯带 2","Reverse LED direction":"反转灯带方向","Flash on print error":"打印出错时闪烁","Error color":"错误颜色",
+"Hot-bed warning":"热床高温警告","Warn at bed °C":"热床警告温度 °C","Warning color":"警告颜色","Warning blinks":"警告闪烁",
+"Printer-status colors (used when":"打印机状态颜色（当","is":"为","effect to show it.":"效果即可播放。",
+"). Printing uses the Printing color above; Error uses the Error color above.":"时使用）。打印中使用上方的打印中颜色；错误使用上方的错误颜色。",
+"Idle":"空闲","Preparing":"准备中","Paused":"已暂停","Completed":"已完成","Per-state effects":"按状态设置效果",
+"Each printer state picks its own effect, brightness, speed and direction. Brightness or speed of 0 inherits the global value. The progress effects follow print progress and fall back to a solid color when no job is active.":"每个打印机状态可选择独立的效果、亮度、速度和方向。亮度或速度为 0 时继承全局值。进度类效果跟随打印进度，无任务时回退为纯色。",
+"Bright":"亮度","Speed":"速度","Dir":"方向","Save lighting":"保存灯效",
+"Solid":"纯色","Cycle":"整体循环","Rainbow":"彩虹","Breathe":"呼吸","Strobe":"频闪","Wave":"波浪","Marquee":"跑马灯","Cylon eye":"扫描眼",
+"Progress bar":"进度条","Animated progress":"动态进度条","Striped progress":"斜纹进度条","Custom animation":"自定义动画",
+"LED animation":"LED 动画",
+"Upload an image and it plays on the strips: each pixel ROW is one frame (width is squeezed to the strip). Stored in RAM only, so it plays instantly and is gone after a reboot. Re-upload to bring it back. Select the":"上传一张图片即可在灯带上播放：图片的每一行像素是一帧（宽度会压缩到灯带长度）。仅存于内存，立即播放，重启后清除，重新上传即可恢复。选择",
+"Image":"图片","Frames per second":"每秒帧数","Loaded":"已加载","Upload & play":"上传并播放","Test rainbow":"测试彩虹","Clear":"清除",
+"Vent calibration":"风阀校准","Recalibrate vent":"重新校准风阀",
+"Re-learn this unit's open and closed endstop positions. The vent sweeps fully open, then fully closed, and stores the result. Run this if the vent stops seating cleanly or after swapping hardware.":"重新学习风阀完全打开和完全关闭的限位位置。风阀会先全开再全关并保存结果。风阀关不严或更换硬件后请执行。",
+"Button ring":"按键指示环","In Auto mode":"自动模式下","In Manual mode":"手动模式下","Off":"熄灭","Blink":"闪烁","Save ring behavior":"保存指示环行为",
+"What the power-button ring does in each mode. Stock behavior is off in Auto and blinking in Manual.":"设置电源键指示环在各模式下的行为。出厂行为：自动模式熄灭，手动模式闪烁。",
+"Printer binding":"打印机绑定","Unbind printer":"解绑打印机","Really unbind?":"确认解绑？",
+"Restart":"重启","Restart device":"重启设备","Really restart?":"确认重启？",
+"Reboots the vent. Wi-Fi, printer binding and settings are kept. Needed after a hostname change.":"重启风阀。Wi-Fi、打印机绑定和设置均保留。修改主机名后需要重启。",
+"Network & printer source":"网络与打印机来源","Open device setup":"打开设备设置",
+"Wi-Fi credentials, Moonraker or Bambu connection, fallback AP, firmware update, logs and factory reset remain available in the recovery-safe setup page.":"Wi-Fi 凭据、Moonraker 或拓竹连接、备用热点、固件更新、日志和恢复出厂设置都在这个安全的设置页中。",
+"Appearance":"外观","System":"跟随系统","Light":"浅色","Dark":"深色","Language":"语言",
+"Fans":"风扇","Chamber exhaust":"仓体排风","Chamber fan speed":"仓体风扇转速","Reported speeds":"上报转速","Part cooling":"部件冷却","Auxiliary":"辅助","Heatbreak":"喉管",
+"Increase chamber fan":"提高仓体风扇","Decrease chamber fan":"降低仓体风扇","Max":"最大",
+"Drive the printer's chamber exhaust directly. This is the one control that writes to the printer; everything else DragonVent does is read-only. The automatic vent policy is unaffected.":"直接控制打印机的仓体排风。这是唯一会写入打印机的控制；DragonVent 其余功能全部只读。自动风阀策略不受影响。",
+"Live from the printer's own status report. The printer is the authority: if it overrides a value at a layer change, it shows up here.":"来自打印机自身状态上报。以打印机为准：若换层时被覆盖，这里会同步显示。",
+"Device setup":"设备设置","Wi-Fi":"Wi-Fi","Network":"网络","Hidden SSID":"隐藏 SSID","Password":"密码","Rescan":"重新扫描","Save Wi-Fi & reboot":"保存 Wi-Fi 并重启",
+"Fallback setup AP":"备用设置热点","SSID (blank = default)":"SSID（留空为默认）","Password (blank = default)":"密码（留空为默认）","Gateway IPv4":"网关 IPv4","Fallback":"备用热点","Enabled":"启用","Disabled":"停用","Save AP & reboot":"保存热点并重启",
+"Control token":"控制令牌","Token":"令牌","Set token":"设置令牌","Clear token":"清除令牌","Enter a token, or leave blank":"输入令牌，或留空",
+"A control token locks every command to clients that send it. If you set one, this browser remembers it — but Klipper/Moonraker and any other device must be given the same token or they can no longer control the heater. Clear it to return to open LAN control.":"控制令牌会要求每个命令都携带它。设置后本浏览器会记住，但 Klipper/Moonraker 及其他设备也必须配置相同令牌，否则无法控制。清除后恢复开放的局域网控制。",
+"Firmware & maintenance":"固件与维护","Upload firmware":"上传固件","Refresh logs":"刷新日志","Factory reset":"恢复出厂设置",
+"Device identity":"设备标识","Hostname":"主机名",
+"Hostname for <name>.local. Lowercase letters, digits and hyphens, up to 31 characters. Takes effect after a restart.":"用于 <名称>.local 的主机名。小写字母、数字和连字符，最多 31 个字符。重启后生效。",
+"Printer source":"打印机来源","Control source":"控制来源","Choose one controller. Source changes take effect after restart.":"选择一个控制器。来源更改会立即应用到打印机连接。",
+"Klipper / Moonraker":"Klipper / Moonraker","Bambu LAN":"拓竹局域网","Standalone":"独立模式",
+"Moonraker host":"Moonraker 主机","Moonraker port":"Moonraker 端口","Moonraker API key":"Moonraker API 密钥",
+"Bambu host":"拓竹主机","Bambu serial":"拓竹序列号","Bambu access code":"拓竹访问码","Search for printers on the network":"在网络中搜索打印机","Search for printers":"搜索打印机",
+"Open at °C":"打开温度 °C","Close below °C":"关闭温度 °C",
+"No results yet":"暂无结果","Searching…":"搜索中…","None found — try again":"未找到，请重试",
+"MOVING":"移动中","OPEN":"已开","CLOSED":"已关","STOPPED":"已停止",
+"Vent in motion":"风阀动作中","Airflow open":"排风已开启","Chamber sealed":"仓体已密封","Vent stopped":"风阀已停止",
+"AUTO mode":"自动模式","MANUAL mode":"手动模式",
+"Following printer activity and bed temperature automatically.":"正在根据打印机状态和热床温度自动控制。",
+"Manual control is active. Select Auto to resume printer-following.":"手动控制中。选择“自动”后恢复跟随打印机。",
+"connected":"已连接","not connected":"未连接","standalone":"独立模式","unknown":"未知","idle":"空闲","preparing":"准备中","printing":"打印中","paused":"已暂停","complete":"已完成","error":"错误","downloading":"下载中","none":"无",
+"Calibrating…":"校准中…","Calibration complete — endstops learned.":"校准完成，限位已学习。","Recalibrating — the vent will sweep open, then closed…":"重新校准中，风阀将先全开再全关…","Calibration failed.":"校准失败。",
+"Saving…":"保存中…","Lighting saved.":"灯效已保存。","Save failed.":"保存失败。","Saving policy…":"策略保存中…","Automatic printer-following enabled.":"已启用自动跟随打印机。","Could not save policy.":"无法保存策略。","Open temperature must be higher than close temperature.":"打开温度必须高于关闭温度。","Filament rules saved.":"耗材规则已保存。",
+"Ring behavior saved.":"指示环行为已保存。","Unbinding…":"解绑中…","Printer unbound. Bind again from Printer setup in the drawer.":"打印机已解绑。可在侧栏的打印机设置中重新绑定。","Unbind failed.":"解绑失败。",
+"Restarting… the page reloads when the vent is back.":"重启中… 设备恢复后页面会自动刷新。",
+"Uploading…":"上传中…","Uploading test…":"正在上传测试动画…","Loaded. Select the Custom animation effect to play it.":"已加载。选择“自定义动画”效果即可播放。","Rainbow loaded. Select the Custom animation effect to play it.":"彩虹已加载。选择“自定义动画”效果即可播放。","Cleared.":"已清除。","Upload failed.":"上传失败。","Clear failed.":"清除失败。","Could not read that image.":"无法读取该图片。","Choose an image first. Each pixel row becomes one frame.":"请先选择图片。图片的每一行像素将成为一帧。",
+"none (RAM only, cleared by reboot)":"无（仅存内存，重启后清除）",
+"Bambu LAN. ":"拓竹局域网。","Connected.":"已连接。","Not connected.":"未连接。"," Reason: ":" 原因：","Control source: ":"控制来源：",
+"access code rejected by the printer":"打印机拒绝了访问码","printer MQTT service unavailable":"打印机 MQTT 服务不可用","printer refused the MQTT session":"打印机拒绝了 MQTT 会话",
+"Scanning…":"扫描中…","Saved. Rebooting…":"已保存，重启中…","Scan failed.":"扫描失败。","Could not save Wi-Fi.":"无法保存 Wi-Fi。","Could not save AP settings.":"无法保存热点设置。","Could not load logs.":"无法加载日志。","Provisioning service is unavailable in this firmware.":"此固件不提供配网服务。"
+};
+</script>
+<script>
 (function(){
   var app = document.querySelector('.app');
   var ventApp = document.getElementById('dv-app');
@@ -1414,14 +1496,14 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
   var ventWasCalibrating = false;
   var product = 'dragonbreath';
   var $ = function(id){ return document.getElementById(id); };
-  function u(id, v){ var e=$(id); if(e) e.textContent = v; }
+  function u(id, v){ var e=$(id); if(e) e.textContent = t(v); }
   function deg(v){ return v==null ? '--' : Number(v).toFixed(1)+'°C'; }
 
   /* ---- Shared provisioning and recovery plane (dc_portal). The product only
      supplies a field schema and persistence callback; core owns the transport,
      Wi-Fi/AP/OTA/log/reset routes, and this renderer. ---- */
   var setupData=null;
-  function setupMessage(id,text,error){ var e=$(id); if(!e)return; e.textContent=text||''; e.className='provision-msg'+(error?' is-error':''); }
+  function setupMessage(id,text,error){ var e=$(id); if(!e)return; e.textContent=t(text)||''; e.className='provision-msg'+(error?' is-error':''); }
   /* ---- Control-token transport, shared by every product ----
      ONE derivation for every caller: dcFetchJson, the OTA uploader, and the
      product dashboards' hdr(). 'web' is a CSRF sentinel rather than a secret —
@@ -1467,14 +1549,14 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
   }
   function fieldControl(field){
     var wrap=document.createElement('div'); wrap.className='provision-field';
-    var label=document.createElement('label'); label.textContent=field.label||field.key; wrap.appendChild(label);
+    var label=document.createElement('label'); label.textContent=t(field.label||field.key); wrap.appendChild(label);
     var input;
     if(field.type==='select'){
       input=document.createElement('select'); (field.options||[]).forEach(function(opt){
-        var o=document.createElement('option'); o.value=String(opt.value); o.textContent=opt.label||String(opt.value); input.appendChild(o);
+        var o=document.createElement('option'); o.value=String(opt.value); o.textContent=t(opt.label||String(opt.value)); input.appendChild(o);
       });
     } else if(field.type==='boolean'){
-      input=document.createElement('select'); [['1','Enabled'],['0','Disabled']].forEach(function(pair){var o=document.createElement('option');o.value=pair[0];o.textContent=pair[1];input.appendChild(o);});
+      input=document.createElement('select'); [['1','Enabled'],['0','Disabled']].forEach(function(pair){var o=document.createElement('option');o.value=pair[0];o.textContent=t(pair[1]);input.appendChild(o);});
     } else {
       input=document.createElement('input'); input.type=field.secret?'password':(field.type==='number'?'number':'text');
       if(field.min!=null)input.min=field.min; if(field.max!=null)input.max=field.max; if(field.step!=null)input.step=field.step;
@@ -1510,8 +1592,8 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
     var conds=[];
     spec.sections.forEach(function(section){
       var card=document.createElement('article');card.className='provision-card';
-      var title=document.createElement('h3');title.textContent=section.title||'Product settings';card.appendChild(title);
-      if(section.description){var note=document.createElement('p');note.className='set-note';note.textContent=section.description;card.appendChild(note);}
+      var title=document.createElement('h3');title.textContent=t(section.title||'Product settings');card.appendChild(title);
+      if(section.description){var note=document.createElement('p');note.className='set-note';note.textContent=t(section.description);card.appendChild(note);}
       var grid=document.createElement('div');grid.className='provision-grid';(section.fields||[]).forEach(function(f){grid.appendChild(fieldControl(f));});card.appendChild(grid);
       /* Optional LAN discovery: a section may carry discovery:{scan,endpoint,list,label,fill}.
          Discovery is user-initiated only — nothing scans until Search is clicked or
@@ -1522,14 +1604,14 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
       if(section.discovery&&(section.discovery.scan||section.discovery.endpoint)){
         (function(disc){
           var drow=document.createElement('div');drow.className='provision-actions';
-          var scan=document.createElement('button');scan.type='button';scan.className='btn';var scanLabel=disc.label||'Search for printers';scan.textContent=scanLabel;
+          var scan=document.createElement('button');scan.type='button';scan.className='btn';var scanLabel=t(disc.label||'Search for printers');scan.textContent=scanLabel;
           var pick=document.createElement('select');pick.className='provision-discovery-pick';var ph=document.createElement('option');ph.value='';ph.textContent='No results yet';pick.appendChild(ph);
           drow.appendChild(scan);drow.appendChild(pick);card.appendChild(drow);
           var busy=false;
           function fillPicker(items,scanning){
             pick._items=items;pick.replaceChildren();
             var o0=document.createElement('option');o0.value='';
-            o0.textContent=items.length?('Found '+items.length+' — choose one'):(scanning?'Searching…':'None found — try again');
+            o0.textContent=items.length?((window.dvLang==='zh'?('已找到 '+items.length+' 台，请选择'):('Found '+items.length+' — choose one'))):(scanning?t('Searching…'):t('None found — try again'));
             pick.appendChild(o0);
             items.forEach(function(it,idx){var o=document.createElement('option');o.value=String(idx);o.textContent=(it.name||it.serial||it.host||('#'+idx))+(it.host?(' · '+it.host):'')+(it.model?(' · '+it.model):'');pick.appendChild(o);});
           }
@@ -2049,11 +2131,11 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
     psCache.dir=psArr(c.dir_state,psCache.dir);
     var g=$('dv-perstate-grid'); if(!g) return;
     g.innerHTML='';
-    var opts=PS_FX.map(function(n,ix){return '<option value="'+ix+'">'+n+'</option>';}).join('');
+    var opts=PS_FX.map(function(n,ix){return '<option value="'+ix+'">'+t(n)+'</option>';}).join('');
     PS_STATES.forEach(function(st){
       var i=st[0];
       var row=document.createElement('div'); row.className='ps-row'; row.dataset.psIndex=i;
-      row.innerHTML='<span class="ps-name">'+st[1]+'</span>'
+      row.innerHTML='<span class="ps-name">'+t(st[1])+'</span>'
         +'<select class="ps-fx">'+opts+'</select>'
         +'<input class="ps-br" type="number" min="0" max="255" step="1">'
         +'<input class="ps-sp" type="number" min="0" max="255" step="1">'
@@ -2297,7 +2379,7 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
   }
   function ventFlash(id,msg,klass){
     var e=$(id); if(!e) return;
-    e.textContent=msg||''; e.className='mode-feedback'+(klass?' '+klass:'');
+    e.textContent=t(msg)||''; e.className='mode-feedback'+(klass?' '+klass:'');
   }
 
   function apply(s){
@@ -3038,8 +3120,8 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
   function armTwice(btn, idle, ask, fn){
     var armed=false;
     btn.addEventListener('click',function(){
-      if(!armed){ armed=true; btn.textContent=ask; setTimeout(function(){ armed=false; btn.textContent=idle; },4000); return; }
-      armed=false; btn.textContent=idle; fn();
+      if(!armed){ armed=true; btn.textContent=t(ask); setTimeout(function(){ armed=false; btn.textContent=t(idle); },4000); return; }
+      armed=false; btn.textContent=t(idle); fn();
     });
   }
   if($('dv-unbind')) armTwice($('dv-unbind'),'Unbind printer','Really unbind?',function(){
@@ -3126,7 +3208,33 @@ svg.icon{ width: 20px; height: 20px; fill: none; stroke: currentColor;
   /* Reveal whatever surface applyDeviceInfo settled on. Called from both the
      success and failure paths: a device that never answers /api/v2/info still
      has to render its default surface rather than a blank page. */
-  function bootReady(){ document.documentElement.removeAttribute('data-booting'); }
+  function translatePage(){
+    if(window.dvLang!=='zh') return;
+    var d=window.DV_ZH;
+    var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null);
+    var n;
+    while((n=w.nextNode())){
+      var tx=n.nodeValue, tr=tx&&tx.trim();
+      if(tr&&d[tr]) n.nodeValue=tx.replace(tr,d[tr]);
+    }
+    ['aria-label','placeholder','title'].forEach(function(at){
+      document.querySelectorAll('['+at+']').forEach(function(el){
+        var v=el.getAttribute(at);
+        if(v&&d[v]) el.setAttribute(at,d[v]);
+      });
+    });
+    document.documentElement.lang = 'zh-CN';
+  }
+  var langSel=$('dv-lang');
+  if(langSel){
+    langSel.value=window.dvLang;
+    langSel.addEventListener('change',function(){
+      try{ localStorage.setItem('dv-lang',this.value); }catch(e){}
+      location.reload();
+    });
+  }
+  translatePage();
+  function bootReady(){ document.documentElement.removeAttribute('data-booting'); translatePage(); }
   setTimeout(bootReady, 4000);   // backstop: never leave the page blank
 
   fetch('/api/v2/info').then(function(r){ return r.json(); }).then(function(i){

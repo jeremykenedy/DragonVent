@@ -41,6 +41,9 @@ by IP, so there is no CA to verify against; without these esp-tls fails SSL setu
 never connect. Add both, or drop the dc_bambu dependency."
 #endif
 
+#include "esp_timer.h"
+#include "freertos/task.h"
+
 static const char *TAG = "dc_bambu";
 
 #define NVS_NS   "app_nvs"
@@ -346,10 +349,41 @@ static void mqtt_event_handler(void *args, esp_event_base_t base, int32_t id, vo
         ESP_LOGI(TAG, "connected; subscribing %s", s_report_topic);
         xSemaphoreTake(s_lock, portMAX_DELAY);
         s_status.state = DC_BAMBU_CONNECTED;   // not SUBSCRIBED until first report
+        s_status.last_failure[0] = '\0';
         xSemaphoreGive(s_lock);
-        esp_mqtt_client_subscribe(s_client, s_report_topic, 0);
-        esp_mqtt_client_publish(s_client, s_request_topic, PUSHALL, 0, 0, 0);
+        esp_mqtt_client_subscribe(e->client, s_report_topic, 0);
+        esp_mqtt_client_publish(e->client, s_request_topic, PUSHALL, 0, 0, 0);
         break;
+
+    case MQTT_EVENT_ERROR: {
+        // Surface WHY a connection attempt failed, the way dc_wifi surfaces
+        // last_failure. A wrong access code otherwise fails in silence.
+        esp_mqtt_error_codes_t *er = e->error_handle;
+        char msg[64] = "";
+        if (er && er->error_type == MQTT_ERROR_TYPE_CONNECTION_REFUSED) {
+            switch (er->connect_return_code) {
+            case MQTT_CONNECTION_REFUSE_BAD_USERNAME:
+            case MQTT_CONNECTION_REFUSE_NOT_AUTHORIZED:
+                snprintf(msg, sizeof msg, "access code rejected by the printer"); break;
+            case MQTT_CONNECTION_REFUSE_SERVER_UNAVAILABLE:
+                snprintf(msg, sizeof msg, "printer MQTT service unavailable"); break;
+            case MQTT_CONNECTION_REFUSE_PROTOCOL:
+            case MQTT_CONNECTION_REFUSE_ID_REJECTED:
+                snprintf(msg, sizeof msg, "printer refused the MQTT session"); break;
+            default:
+                snprintf(msg, sizeof msg, "connection refused (code %d)", (int)er->connect_return_code); break;
+            }
+        } else if (er && er->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
+            snprintf(msg, sizeof msg, "no TCP/TLS connection to %.36s", s_cfg.host);
+        }
+        if (msg[0]) {
+            xSemaphoreTake(s_lock, portMAX_DELAY);
+            snprintf(s_status.last_failure, sizeof s_status.last_failure, "%s", msg);
+            xSemaphoreGive(s_lock);
+            ESP_LOGW(TAG, "connect failed: %s", msg);
+        }
+        break;
+    }
 
     case MQTT_EVENT_DISCONNECTED:
         xSemaphoreTake(s_lock, portMAX_DELAY);
@@ -387,30 +421,44 @@ static void mqtt_event_handler(void *args, esp_event_base_t base, int32_t id, vo
 
 // ---------- lifecycle ----------
 
-esp_err_t dc_bambu_start(void)
+static void heal_task(void *arg);
+
+/* Bring the MQTT client up from the saved config. Called with NO locks held:
+ * client stop/start joins the event task, which itself takes s_lock, so
+ * orchestrating while holding the lock would deadlock. */
+static esp_err_t client_bringup(void)
 {
-    if (s_lock != NULL) return ESP_ERR_INVALID_STATE;
-    s_lock = xSemaphoreCreateMutex();
-    if (s_lock == NULL) return ESP_ERR_NO_MEM;
+    dc_bambu_config_t cfg;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    cfg = s_cfg;
+    xSemaphoreGive(s_lock);
 
-    if (nvs_load(&s_cfg) != ESP_OK || s_cfg.host[0] == '\0') {
+    if (cfg.host[0] == '\0') {
         ESP_LOGI(TAG, "no Bambu config saved; idle");
+        xSemaphoreTake(s_lock, portMAX_DELAY);
         s_status.state = DC_BAMBU_DISABLED;
+        s_status.connected = false;
+        xSemaphoreGive(s_lock);
         return ESP_OK;
     }
-    if (s_cfg.serial[0] == '\0' || s_cfg.code[0] == '\0') {
+    if (cfg.serial[0] == '\0' || cfg.code[0] == '\0') {
         ESP_LOGW(TAG, "Bambu needs host + serial + access code; idle");
+        xSemaphoreTake(s_lock, portMAX_DELAY);
         s_status.state = DC_BAMBU_DISABLED;
+        s_status.connected = false;
+        xSemaphoreGive(s_lock);
         return ESP_OK;
     }
 
-    s_rx = malloc(RX_CAP);
-    if (s_rx == NULL) return ESP_ERR_NO_MEM;
-    snprintf(s_report_topic,  sizeof s_report_topic,  "device/%s/report",  s_cfg.serial);
-    snprintf(s_request_topic, sizeof s_request_topic, "device/%s/request", s_cfg.serial);
+    if (s_rx == NULL) {
+        s_rx = malloc(RX_CAP);
+        if (s_rx == NULL) return ESP_ERR_NO_MEM;
+    }
+    snprintf(s_report_topic,  sizeof s_report_topic,  "device/%s/report",  cfg.serial);
+    snprintf(s_request_topic, sizeof s_request_topic, "device/%s/request", cfg.serial);
 
     char uri[96];
-    snprintf(uri, sizeof uri, "mqtts://%s:8883", s_cfg.host);
+    snprintf(uri, sizeof uri, "mqtts://%s:8883", cfg.host);
     esp_mqtt_client_config_t mc = {
         .broker.address.uri = uri,
         // Self-signed per-device cert (CN=serial) reached by IP: no CA to verify
@@ -422,27 +470,76 @@ esp_err_t dc_bambu_start(void)
         .broker.verification.skip_cert_common_name_check = true,
         .broker.verification.use_global_ca_store = false,
         .credentials.username = "bblp",
-        .credentials.authentication.password = s_cfg.code,
+        .credentials.authentication.password = cfg.code,   // esp-mqtt duplicates config strings
         .buffer.size = MQTT_BUF,
     };
 
-    s_client = esp_mqtt_client_init(&mc);
-    if (s_client == NULL) {
+    esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mc);
+    if (client == NULL) {
         ESP_LOGE(TAG, "esp_mqtt_client_init failed");
-        free(s_rx); s_rx = NULL;
+        xSemaphoreTake(s_lock, portMAX_DELAY);
         s_status.state = DC_BAMBU_DISCONNECTED;
+        xSemaphoreGive(s_lock);
         return ESP_FAIL;
     }
-    esp_mqtt_client_register_event(s_client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
-    esp_err_t err = esp_mqtt_client_start(s_client);
+    esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
+    esp_err_t err = esp_mqtt_client_start(client);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_mqtt_client_start: %s", esp_err_to_name(err));
+        esp_mqtt_client_destroy(client);
+        xSemaphoreTake(s_lock, portMAX_DELAY);
         s_status.state = DC_BAMBU_DISCONNECTED;
+        xSemaphoreGive(s_lock);
         return err;
     }
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    s_client = client;
     s_status.state = DC_BAMBU_CONNECTING;
-    ESP_LOGI(TAG, "connecting to %s (serial %s)", uri, s_cfg.serial);
+    xSemaphoreGive(s_lock);
+    ESP_LOGI(TAG, "connecting to %s (serial %s)", uri, cfg.serial);
     return ESP_OK;
+}
+
+/* Detach the running client and stop it with no locks held. */
+static void client_teardown(dc_bambu_state_t idle_state)
+{
+    esp_mqtt_client_handle_t old;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    old = s_client;
+    s_client = NULL;
+    s_status.state = idle_state;
+    s_status.connected = false;
+    xSemaphoreGive(s_lock);
+    if (old) {
+        esp_mqtt_client_stop(old);
+        esp_mqtt_client_destroy(old);
+    }
+}
+
+esp_err_t dc_bambu_start(void)
+{
+    if (s_lock != NULL) return ESP_ERR_INVALID_STATE;
+    s_lock = xSemaphoreCreateMutex();
+    if (s_lock == NULL) return ESP_ERR_NO_MEM;
+
+    (void)nvs_load(&s_cfg);
+    esp_err_t err = client_bringup();
+
+    /* Watch for a printer whose DHCP lease moved it to a new address: after a
+     * sustained outage, rediscover by serial over SSDP and rebind. */
+    if (xTaskCreate(heal_task, "bb_heal", 3072, NULL, 2, NULL) != pdPASS)
+        ESP_LOGW(TAG, "could not start the rebind watcher");
+    return err;
+}
+
+esp_err_t dc_bambu_restart(void)
+{
+    if (s_lock == NULL) return ESP_ERR_INVALID_STATE;
+    client_teardown(DC_BAMBU_DISCONNECTED);
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    s_status.last_failure[0] = '\0';
+    xSemaphoreGive(s_lock);
+    return client_bringup();
 }
 
 esp_err_t dc_bambu_set_config(const dc_bambu_config_t *cfg)
@@ -454,10 +551,53 @@ esp_err_t dc_bambu_set_config(const dc_bambu_config_t *cfg)
         xSemaphoreTake(s_lock, portMAX_DELAY);
         s_cfg = *cfg;
         xSemaphoreGive(s_lock);
-    } else {
-        s_cfg = *cfg;
+        return dc_bambu_restart();   // apply immediately; no reboot needed
     }
-    return ESP_OK;   // takes effect on next boot (matches dc_moonraker semantics)
+    s_cfg = *cfg;
+    return ESP_OK;                   // pre-start: dc_bambu_start() picks it up
+}
+
+/* Sustained-outage watcher. 90 s of DISCONNECTED/CONNECTING with a full config
+ * triggers one SSDP scan; a discovery whose serial matches but whose host
+ * differs rebinds the client to the printer's new address. */
+static void heal_task(void *arg)
+{
+    (void)arg;
+    int64_t down_since = 0;
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(15000));
+        dc_bambu_state_t st;
+        char host[64], serial[32];
+        xSemaphoreTake(s_lock, portMAX_DELAY);
+        st = s_status.state;
+        snprintf(host, sizeof host, "%s", s_cfg.host);
+        snprintf(serial, sizeof serial, "%s", s_cfg.serial);
+        xSemaphoreGive(s_lock);
+
+        if (st != DC_BAMBU_DISCONNECTED && st != DC_BAMBU_CONNECTING) { down_since = 0; continue; }
+        if (serial[0] == '\0' || host[0] == '\0') { down_since = 0; continue; }
+
+        int64_t now = esp_timer_get_time();
+        if (down_since == 0) { down_since = now; continue; }
+        if (now - down_since < 90LL * 1000000LL) continue;
+
+        ESP_LOGW(TAG, "printer unreachable for 90 s; scanning the LAN for serial %s", serial);
+        (void)dc_bambu_scan_start();
+        vTaskDelay(pdMS_TO_TICKS(9000));
+        dc_bambu_found_t found[DC_BAMBU_DISCOVER_MAX];
+        int n = dc_bambu_discover_get(found, DC_BAMBU_DISCOVER_MAX);
+        for (int i = 0; i < n; ++i) {
+            if (strcmp(found[i].serial, serial) == 0 && strcmp(found[i].host, host) != 0) {
+                ESP_LOGW(TAG, "printer %s moved %s -> %s; rebinding", serial, host, found[i].host);
+                dc_bambu_config_t cfg;
+                dc_bambu_get_config(&cfg);
+                snprintf(cfg.host, sizeof cfg.host, "%s", found[i].host);
+                (void)dc_bambu_set_config(&cfg);   // persists + reconnects
+                break;
+            }
+        }
+        down_since = now;   // rate-limit: at most one scan per outage window
+    }
 }
 
 esp_err_t dc_bambu_get_config(dc_bambu_config_t *out)
@@ -551,8 +691,14 @@ esp_err_t dc_bambu_clear_config(void)
     nvs_commit(h);
     nvs_close(h);
     if (s_lock) {
+        client_teardown(DC_BAMBU_DISABLED);   // live unbind: drop the printer now
         xSemaphoreTake(s_lock, portMAX_DELAY);
         memset(&s_cfg, 0, sizeof(s_cfg));
+        s_status.printing = false;
+        s_status.error = false;
+        s_status.print_state = DC_BAMBU_PRINT_UNKNOWN;
+        s_status.progress = -1.0f;
+        s_status.last_failure[0] = '\0';
         xSemaphoreGive(s_lock);
     } else {
         memset(&s_cfg, 0, sizeof(s_cfg));

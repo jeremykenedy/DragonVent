@@ -49,13 +49,23 @@ typedef struct {
     bool  error;          // gcode_state is FAILED (print failed / errored)
     float progress;       // mc_percent / 100, or -1 until the printer reports it
     dc_bambu_print_state_t print_state; // normalized MQTT gcode_state phase
+    char  last_failure[64]; // why the last connection attempt failed ("" when
+                            // healthy): "access code rejected by the printer",
+                            // "no TCP/TLS connection to <host>", ... Cleared on
+                            // a successful connect. Mirrors dc_wifi's
+                            // last_failure so binding mistakes stop being silent.
 } dc_bambu_status_t;
 
 esp_err_t dc_bambu_start(void);
 
-// Overwrite saved config (NVS). Safe before dc_bambu_start(); the running client
-// (once implemented) will reconnect with the new settings.
+// Overwrite saved config (NVS). Safe before dc_bambu_start(); on a running
+// system the client is torn down and reconnected with the new settings
+// immediately (no reboot needed).
 esp_err_t dc_bambu_set_config(const dc_bambu_config_t *cfg);
+
+// Tear the MQTT client down and bring it back up from the saved config. Used
+// after a config change and by the rebind watcher; safe when idle/disabled.
+esp_err_t dc_bambu_restart(void);
 
 // Returns persisted config even when dc_bambu_start() has not been called.
 esp_err_t dc_bambu_get_config(dc_bambu_config_t *out);
@@ -111,7 +121,8 @@ esp_err_t dc_bambu_send_gcode(const char *line);
 // silently discards every command.
 void dc_bambu_last_gcode_error(char *out, size_t len);
 
-// Wipe saved Bambu config (factory reset).
+// Wipe saved Bambu config and, on a running system, disconnect from the
+// printer immediately (unbind). Also used by factory reset.
 esp_err_t dc_bambu_clear_config(void);
 
 // --- LAN discovery (SSDP), on demand only -----------------------------------

@@ -979,7 +979,7 @@ static esp_err_t restart_post(httpd_req_t *req)
 // then frames*pixels*3 RGB bytes. Lives in heap only — lost on reboot, which is
 // the deliberate trade that keeps the stock partition table and the
 // OTA-back-to-stock path intact.
-#define DV_ANIM_MAX_BYTES (128 * 1024)
+#define DV_ANIM_MAX_BYTES (64 * 1024)
 
 static esp_err_t anim_get(httpd_req_t *req)
 {

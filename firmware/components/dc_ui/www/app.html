@@ -3141,7 +3141,7 @@ window.DV_ZH={
     var fps=Math.max(1,Math.min(60,parseInt($('dv-anim-fps').value,10)||12));
     var img=new Image();
     img.onload=function(){
-      var pixels=Math.min(255,img.naturalWidth||30), frames=Math.min(1400,img.naturalHeight||1);
+      var pixels=Math.min(255,img.naturalWidth||30), frames=Math.min(700,img.naturalHeight||1);
       var cv=document.createElement('canvas'); cv.width=pixels; cv.height=frames;
       var cx=cv.getContext('2d'); cx.drawImage(img,0,0,pixels,frames);
       var d=cx.getImageData(0,0,pixels,frames).data;

@@ -23,10 +23,11 @@ static const char *TAG = "dragonvent";
 static esp_err_t configure_network_identity(void)
 {
     /* The hostname is NVS-backed ("hostname" in app_nvs, the stock namespace)
-     * with "vent1" as the compiled default. dc_wifi_set_identity() copies into
+     * with "pandavent" as the compiled default; each install names its own
+     * device on the setup screen. dc_wifi_set_identity() copies into
      * a static buffer and must run before dc_wifi_start(), so this is the only
      * place a stored hostname can take effect; changing it needs a reboot. */
-    static char hostname[32] = "vent1";
+    static char hostname[32] = "pandavent";
     nvs_handle_t h;
     if (nvs_open("app_nvs", NVS_READONLY, &h) == ESP_OK) {
         char saved[32];

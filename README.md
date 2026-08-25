@@ -1,119 +1,82 @@
-# DragonVent
+# PandaVent
 
-Open firmware for the [BIGTREETECH Panda Vent](https://github.com/bigtreetech/Panda-Vent), built on the shared [`dragon-core`](https://github.com/justinh-rahb/dragon-core) networking and printer-integration components.
+Custom firmware for the **BIQU Panda Vent** chamber vent: per-state LED
+lighting, print-progress effects, RAM animations, a live dashboard, and
+self-healing printer binding, in a fast single-page web UI served from the
+device itself.
 
-## What is this?
+PandaVent is built on [DragonVent](https://github.com/justinh-rahb/DragonVent)
+by Justin Hayes and the shared
+[dragon-core](https://github.com/justinh-rahb/dragon-core) components, over
+the stock BIQU/BigTreeTech partition layout, so installing and reverting are
+both plain over-the-air uploads. No cables, no soldering, no printer mods.
 
-The Panda Vent is a smart vent riser for enclosed 3D printers. DragonVent replaces its stock firmware and currently integrates with Klipper printers through Moonraker while preserving the proven OpenVent motor, hall-sensor, button, and vent-policy implementation.
+## Highlights
 
-## Screenshots
+- **Dashboard**: live printer telemetry (nozzle, bed, chamber, fans, Wi-Fi),
+  a real progress job card, a "Lighting now" card showing exactly what the
+  strips are rendering, and a top bar with the printer state at a glance.
+- **Per-state lighting**: every printer state (idle, preparing, printing,
+  paused, completed, error) can have its own effect, brightness, speed, and
+  direction, or run one global effect.
+- **Progress effects**: progress bar, animated progress with a breathing
+  head, and a two-color striped barber pole that crawls through the fill.
+- **RAM animations**: upload any image and its pixel rows play as frames on
+  the strips (kept in RAM by design, so the stock partition table and the
+  revert path stay untouched).
+- **Hot-bed warning layer** above the temperature gradient, below the
+  print-error flash.
+- **Self-healing printer binding**: connect failures say why (wrong access
+  code versus unreachable), config changes apply instantly, and if DHCP
+  moves your printer the vent rediscovers it by serial and rebinds itself.
+- **Vent control**: the automatic bed-temperature policy, filament seal
+  rules, manual control, calibration, and printer-fan control from upstream
+  DragonVent, all kept.
+- **Quality of life**: device naming from the setup screen, printer unbind,
+  a plain restart button, a configurable power-ring, English and Simplified
+  Chinese.
 
-<p>
-<img src="docs/screenshots/dashboard.png" width="410" alt="DragonVent dashboard — live vent state, printer/controller status, open/close/auto controls">
-<img src="docs/screenshots/lighting.png" width="410" alt="Lighting page — effects, printer-status colors, and per-strip reverse toggles">
-</p>
+## Install
 
-The device serves a responsive web UI over your LAN (also embeddable in the
-Fluidd / Mainsail panel): live vent controls with the automatic printer-following
-policy, and a **Lighting** page for the WS2812 status strips — effects, colors, and
-per-strip direction.
+Over the air from stock firmware, in a browser. See
+[docs/INSTALL.md](docs/INSTALL.md).
 
-## Features
+## Revert to stock
 
-Working today:
+One OTA upload of BigTreeTech's stock image, any time. See
+[docs/REVERT.md](docs/REVERT.md). PandaVent keeps the stock bootloader,
+partition table, and OTA layout precisely so this stays true.
 
-- **Automatic vent control** — six-state printer model (idle / preparing / printing / paused / complete / error), material-aware policy (PLA opens for cooling, ABS/ASA seals for heat retention), bed-temp hysteresis for residual heat
-- **Stock-parity hall sensing** — per-boot ADC line-fitting calibration with calibrated-millivolt thresholds, matching stock's reproduction contract
-- **Dragon-family dashboard** — responsive DragonVent-flavoured control UI for live vent/source state, manual open/close, and automatic threshold policy
-- **Unified browser management** — the shared Dragon SPA is used on the LAN and on the captive setup AP, with integrated Wi-Fi, printer-source, OTA, logs, and reset controls
-- **Moonraker integration** — WebSocket ingest with `webhooks` / `print_stats` / `virtual_sdcard` / `heater_bed` / `extruder` / optional chamber + `save_variables` (for material), re-subscribes on Klippy restart
-- **Bambu LAN integration (experimental)** — optional read-only MQTT source using the printer's LAN access code; DragonVent never sends printer-control commands. The shared client and portal path build cleanly, but still need validation against a real Bambu printer
-- **Single-source binding** — select Klipper, Bambu LAN, or standalone mode; only the selected printer client starts
-- **Configurable thresholds** — bed OPEN/CLOSE °C editable in the portal, persisted to NVS
-- **Physical button control** — auto/manual mode toggle, manual vent override, manual target persists across reboots
-- **Schema-driven setup** — product-specific source and vent-policy fields are rendered by the common SPA instead of a second firmware page
-- **OTA firmware updates** — flash new firmware from the web UI
-- **RGB status lighting** — WS2812 strips with effects (solid, cycle, rainbow, breathe, strobe, wave, marquee, Cylon), printer-status colors, a temperature gradient, an error flash, and **per-strip reverse** for 2-strip kits (run both strips the same direction or opposite, so effects can "circle" the printer)
+## Safety model
 
-## Documentation
+- The device never writes to your printer, with one deliberate exception:
+  the Fans screen sends `M106` fan gcode. Everything else is read-only LAN
+  MQTT (Bambu) or Moonraker polling.
+- The OTA updater refuses images that are not PandaVent/DragonVent or stock
+  Panda Vent, so a wrong file cannot be made the boot image.
+- Settings live in the stock NVS namespace; stock's factory reset clears
+  them completely after a revert.
 
-- [Hardware Analysis](docs/HARDWARE_ANALYSIS.md) — reverse-engineered GPIO pinout and hardware details
-- [Roadmap](docs/ROADMAP.md) — development phases and architecture
+## Vendored components
 
-## Hardware
+`firmware/components/` carries product components plus vendored copies of
+`dc_bambu`, `dc_wifi`, `dc_ui`, and `dc_lighting` from dragon-core, extended
+for this hardware. The remaining dragon-core dependencies are pinned by
+exact version in `firmware/main/idf_component.yml`.
 
-- **Kit contents**: 1 mainboard + several motorized vent modules + LED boards. Each vent module has one motor, one hall sensor, and identical 3-pin JST connectors on both ends — so multiple modules chain together
-- **Board**: Bigtreetech Panda Vent (ESP32 Xtensa dual-core LX6)
-- **Motors**: up to 4 independent DC motors across two mainboard chains, each driven forward/reverse via LEDC PWM at 30 kHz with hall-sensor position feedback
-- **LEDs**: WS2812 addressable strips via SPI + DMA — GPIO 14 and GPIO 4, one per chain
-- **User button**: switch on GPIO 12, illumination LED on GPIO 27 (off = auto, blink = manual)
-- **BOOT button**: GPIO 0 (long-press = factory reset)
-- **Hardware auto-detect**: single ADC on GPIO 35 picks between "all chains populated" (4 motors), "one chain" (2 motors), and "nothing" — hot-plug supported
+## Building
 
-Full pin map + provenance: [docs/HARDWARE_ANALYSIS.md](docs/HARDWARE_ANALYSIS.md).
-
-## Install — over stock, from a browser (v0.5.0+)
-
-As of **v0.5.0** DragonVent runs on the **stock Panda Vent partition table**, so
-you install and update it **entirely from the web UI** — no serial cable, no
-helper scripts. The stock bootloader is preserved; only the app slot is written.
-
-1. Grab `dragonvent-<tag>-ota.bin` from the [latest release](../../releases/latest).
-2. Open the **stock** Panda Vent's web UI (`http://PandaVent.local/` or its IP)
-   and upload the `ota.bin` on its firmware-update page. It writes DragonVent to
-   the inactive slot and reboots into it.
-3. First boot is the `DragonVent_XXXX` setup AP (WPA2, password `987654321`);
-   join it to set WiFi + printer. Afterwards it's on mDNS at `DragonVent.local`.
-
-Updating an existing DragonVent is the same file, from **Device setup →
-Maintenance** in the DragonVent web UI.
-
-**⚠ Back up stock first** — BTT publishes no Panda Vent image, so dump the flash
-over USB *before* your first install; it's your only way back:
+ESP-IDF v5.3.1, target esp32:
 
 ```
-python -m esptool --chip esp32 -p PORT -b 460800 read_flash 0x0 0x400000 stock-panda-vent-backup.bin
+bash tools/idf-build.sh firmware esp32 build
 ```
 
-**Upgrading from 0.4.x:** those builds used a different partition table, so you
-can't OTA straight across. Write your stock backup back over USB, then install
-over stock from the web UI (same one-time roll-back as the DragonBreath 1.0
-migration). 0.5.0+ update in place.
+The OTA image lands at `firmware/build/dragonvent.bin`.
 
-```
-python -m esptool --chip esp32 -p PORT -b 460800 write_flash 0x0 stock-panda-vent-backup.bin
-```
+## Credits and license
 
-## Status
-
-**DragonVent is the continuation of OpenVent.** The first refactor keeps the
-v0.3.3 hardware behavior and NVS layout while moving WiFi, Moonraker, and event
-logging onto pinned `dragon-core` components.
-
-**OpenVent v0.3.3 restored stock ADC calibration parity.** Reverse-engineered
-against the Ghidra decompile of stock v1.0.0 —
-see [`docs/adc-calibration-spec.md`](docs/adc-calibration-spec.md) for
-the reproduction contract. This unblocks per-board hall-sensor accuracy
-without requiring per-board threshold tuning.
-
-Prior milestone: **v0.2.6 was the first stable proof-of-concept release.**
-2026-07-10 field test on tester OldGuyMeltsPlastic's retail 2-vent kit:
-10× consecutive open/close cycles, no ESP crash, motor stops cleanly on
-each arrival.
-
-- ✅ Motors drive both directions and reliably stop at endpoints, using
-  stock-parity mV thresholds and per-boot ADC line-fitting calibration
-- ✅ Six-state printer model + material-aware auto policy, re-subscribes
-  on Klippy restart
-- ✅ Firmware flashes on real Panda Vent hardware; `dragonvent` script for
-  backup / restore / install works end-to-end
-- ✅ WiFi station + AP fallback, mDNS `DragonVent.local`, captive portal
-- ✅ Unified SPA management: live vent controls plus schema-driven Wi-Fi,
-  printer-source, fallback-AP, event-log, OTA, and factory-reset setup
-- ✅ WS2812 RGB status lighting — effects, printer-status colors, and per-strip reverse (shipped in the 0.5.x series)
-
-[![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/wildtang3nt)
-
-## License
-
-[MIT](LICENSE) © Justin Hayes
+MIT. PandaVent is a derivative of DragonVent (c) Justin Hayes, and both
+notices are retained in [LICENSE](LICENSE). Panda Vent is a BIQU /
+BigTreeTech product; this project is not affiliated with or endorsed by
+BIQU, BigTreeTech, or Bambu Lab.

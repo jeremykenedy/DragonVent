@@ -363,7 +363,7 @@ static esp_err_t info_get(httpd_req_t *req)
     // web-uploadable app image) and never the full USB image. Local/dev builds
     // skip the request entirely, so this is silent until a tagged build runs.
     cJSON *update = cJSON_AddObjectToObject(root, "update");
-    cJSON_AddStringToObject(update, "repo", "justinh-rahb/DragonVent");
+    cJSON_AddStringToObject(update, "repo", "jeremykenedy/DragonVent");
     cJSON_AddStringToObject(update, "asset_prefix", "dragonvent-");
     return send_json(req, root);
 }
@@ -740,7 +740,7 @@ static cJSON *describe_product(void *ctx)
     // Device identity: the mDNS hostname, NVS-backed (stock's set_hostname).
     // Applied by app_main before dc_wifi_start(), so it needs a reboot.
     {
-        char hostname[32] = "vent1";
+        char hostname[32] = "pandavent";
         nvs_handle_t hn;
         if (nvs_open(DV_NVS_NS, NVS_READONLY, &hn) == ESP_OK) {
             char saved[32]; size_t hl = sizeof saved;
@@ -751,7 +751,7 @@ static cJSON *describe_product(void *ctx)
         cJSON *device = cJSON_CreateObject();
         cJSON_AddStringToObject(device, "title", "Device identity");
         cJSON_AddStringToObject(device, "description",
-            "Hostname for <name>.local. Lowercase letters, digits and hyphens, up to 31 characters. Takes effect after a restart.");
+            "Name this device: it becomes <name>.local on your network. Lowercase letters, digits and hyphens, up to 31 characters. Takes effect after a restart.");
         cJSON *dfields = cJSON_AddArrayToObject(device, "fields");
         field(dfields, "hostname", "Hostname", "text", hostname);
         cJSON_AddItemToArray(sections, device);
